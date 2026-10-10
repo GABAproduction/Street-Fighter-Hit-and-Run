@@ -70,6 +70,9 @@ export default function MultiplayerGameCanvas({
   const handleBackToLobbyRef = useRef<(() => void) | null>(null);
   const broadcastRoomAbortRef = useRef<(() => void) | null>(null);
   const disconnectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // gameLoop disimpan lewat useCallback; pakai ref supaya selalu memanggil render terbaru
+  // (sebelumnya render stale → skor, ronde, dan dinding arena tidak pernah ter-update di canvas)
+  const renderRef = useRef<(canvas: HTMLCanvasElement) => void>(() => {});
 
   const [myHp, setMyHp] = useState<number>(GAME_CONFIG.hp.max);
   const [opponentHp, setOpponentHp] = useState<number>(GAME_CONFIG.hp.max);
@@ -218,7 +221,7 @@ export default function MultiplayerGameCanvas({
       setRound(r => r + 1);
       roundRef.current += 1;
       resetRound(myPlayerRef.current, opponentRef.current, isPlayer1 ? 200 : 760, isPlayer1 ? 760 : 200);
-      elapsedMsRef.current = 0;
+      // JANGAN reset elapsedMsRef.current di sini — biarkan arena terus menyempit selama match
       particlesRef.current = [];
       dashTrailRef.current = [];
       matchOverRef.current = false;
@@ -374,13 +377,13 @@ export default function MultiplayerGameCanvas({
 
     if (hitPauseRef.current > 0) {
       hitPauseRef.current--;
-      render(canvasRef.current!);
+      renderRef.current(canvasRef.current!);
       animationRef.current = requestAnimationFrame(gameLoop);
       return;
     }
 
     if (awaitingConfirmRef.current) {
-      render(canvasRef.current!);
+      renderRef.current(canvasRef.current!);
       animationRef.current = requestAnimationFrame(gameLoop);
       return;
     }
@@ -460,7 +463,7 @@ export default function MultiplayerGameCanvas({
       }
     }
 
-    render(canvasRef.current!);
+    renderRef.current(canvasRef.current!);
     animationRef.current = requestAnimationFrame(gameLoop);
   }, [
     gameOver,
@@ -558,6 +561,8 @@ export default function MultiplayerGameCanvas({
     ctx.fillText('← → Jalan | Shift Dash | Spasi/X/Z Pukul', 20, arena.height - 20);
     ctx.restore();
   }, [walls, round, myWins, opponentWins, myName, opponentName, winsNeeded]);
+
+  renderRef.current = render;
 
   const drawCharacter = useCallback((
     ctx: CanvasRenderingContext2D,

@@ -118,6 +118,22 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
     setJoining(true);
 
     try {
+      // Validasi: kode harus ada di daftar room yang tersedia (bukan asal ketik).
+      const { data, error: lookupError } = await (supabase as any)
+        .from('rooms')
+        .select('kode_room, status')
+        .eq('kode_room', code)
+        .maybeSingle();
+
+      if (lookupError || !data) {
+        setError('Kode room tidak ditemukan. Periksa kembali kodenya.');
+        return;
+      }
+      if (data.status === 'finished') {
+        setError('Room tersebut sudah selesai/tidak tersedia.');
+        return;
+      }
+
       localStorage.setItem('sfhr_player_name', trimmedName);
       onEnterRoom(code, trimmedName);
     } catch (e) {

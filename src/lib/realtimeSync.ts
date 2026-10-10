@@ -85,22 +85,48 @@ export function useBattleSync({
   useEffect(() => { onRematchVoteRef.current = onRematchVote; }, [onRematchVote]);
   useEffect(() => { onRoomAbortRef.current = onRoomAbort; }, [onRoomAbort]);
 
+  const onOpponentPresenceChangeRef = useRef(onOpponentPresenceChange);
+  useEffect(() => { onOpponentPresenceChangeRef.current = onOpponentPresenceChange; }, [onOpponentPresenceChange]);
+
+  // Deteksi koneksi lawan: presence saja sering terlambat saat jaringan putus,
+  // jadi juga pakai "heartbeat" — kalau tidak ada pesan dari lawan > 5 detik, anggap terputus.
+  const lastOpponentSeenRef = useRef<number>(Date.now());
+  const opponentConnectedRef = useRef<boolean>(true);
+  const OPPONENT_TIMEOUT_MS = 5000;
+
+  const setOpponentConnected = (present: boolean) => {
+    if (present === opponentConnectedRef.current) return;
+    opponentConnectedRef.current = present;
+    onOpponentPresenceChangeRef.current?.(present);
+  };
+
   useEffect(() => {
     if (!roomCode) return;
+
+    lastOpponentSeenRef.current = Date.now();
+    opponentConnectedRef.current = true;
 
     const channel = supabase.channel(`room:${roomCode}`, {
       config: { broadcast: { self: true }, presence: { key: myUserId } },
     });
 
+    const syncPresence = () => {
+      const state = channel.presenceState<any>();
+      const count = Object.keys(state).length;
+      const present = count > 1; // >1 artinya selain kita ada lawan
+      if (present) lastOpponentSeenRef.current = Date.now();
+      setOpponentConnected(present);
+    };
+
     channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<any>();
-        const count = Object.keys(state).length;
-        onOpponentPresenceChange?.(count > 1); // >1 artinya selain kita ada lawan
-      })
+      .on('presence', { event: 'sync' }, syncPresence)
+      .on('presence', { event: 'join' }, syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
       .on('broadcast', { event: 'game' }, ({ payload }) => {
         const msg = payload as GameBroadcast;
         if (msg.sender_id === myUserId) return;
+        lastOpponentSeenRef.current = Date.now();
+        setOpponentConnected(true);
         handleBroadcastMessage(msg);
       })
       .subscribe(async (status) => {
@@ -109,8 +135,14 @@ export function useBattleSync({
         }
       });
 
+    const heartbeat = setInterval(() => {
+      const present = Date.now() - lastOpponentSeenRef.current < OPPONENT_TIMEOUT_MS;
+      setOpponentConnected(present);
+    }, 1000);
+
     channelRef.current = channel;
     return () => {
+      clearInterval(heartbeat);
       supabase.removeChannel(channel);
     };
   }, [roomCode, myUserId]);

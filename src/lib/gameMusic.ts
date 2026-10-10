@@ -3,19 +3,18 @@
 /**
  * Musik latar looping sederhana pakai WebAudio (tanpa file aset).
  * Dipakai di GameCanvas (single-player) & MultiplayerGameCanvas.
+ *
+ * Catatan penting:
+ * - State disimpan per-instance (bukan modul global) supaya tidak bentrok kalau ada >1 pemanggil.
+ * - Browser memblokir AudioContext sebelum ada interaksi user. Karena itu kita pasang
+ *   listener gesture (pointerdown/keydown) untuk `resume()` konteks audio, sehingga musik
+ *   benar-benar terdengar begitu pemain menekan tombol/klik.
  */
 export interface MusicController {
   start: () => void;
   stop: () => void;
   setVolume: (vol: number) => void;
 }
-
-let musicContext: AudioContext | null = null;
-let musicGain: GainNode | null = null;
-let musicOscillators: OscillatorNode[] = [];
-let musicInterval: ReturnType<typeof setInterval> | null = null;
-let isMusicPlaying = false;
-let musicVolume = 0.08;
 
 /**
  * Urutan nada (frekuensi Hz) — sederhana, tipe "retro fighting game".
@@ -33,87 +32,109 @@ const melody = [
 ] as const;
 
 const bassNotes = [98.00, 110.00, 123.47, 130.81] as const; // G2 A2 B2 C3
-let bassIndex = 0;
-
-function getCtx() {
-  if (!musicContext) {
-    musicContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    musicGain = musicContext.createGain();
-    musicGain.gain.value = musicVolume;
-    musicGain.connect(musicContext.destination);
-  }
-  return musicContext;
-}
-
-function playNote(freq: number, duration: number, type: OscillatorType = 'square', gainMult = 1) {
-  const ctx = getCtx();
-  if (ctx.state === 'suspended') ctx.resume();
-
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = type;
-  osc.frequency.value = freq;
-  gain.gain.value = musicVolume * gainMult;
-  osc.connect(gain);
-  gain.connect(musicGain!);
-  const now = ctx.currentTime;
-  gain.gain.setValueAtTime(musicVolume * gainMult, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-  osc.start(now);
-  osc.stop(now + duration);
-  musicOscillators.push(osc);
-  osc.onended = () => {
-    const idx = musicOscillators.indexOf(osc);
-    if (idx !== -1) musicOscillators.splice(idx, 1);
-  };
-}
-
-function scheduleNextBar() {
-  if (!isMusicPlaying) return;
-  const ctx = getCtx();
-  const now = ctx.currentTime;
-
-  // Bass tiap 2 beat
-  if (bassIndex % 2 === 0) {
-    playNote(bassNotes[bassIndex % bassNotes.length], 0.4, 'sawtooth', 0.6);
-  }
-  bassIndex = (bassIndex + 1) % bassNotes.length;
-
-  // Melody
-  melody.forEach((note, i) => {
-    const delay = i * 0.2; // spacing
-    setTimeout(() => {
-      if (!isMusicPlaying) return;
-      playNote(note.freq, note.dur, 'triangle', 0.5);
-    }, delay * 1000);
-  });
-
-  const barDuration = melody.length * 0.2 + 0.3;
-  musicInterval = setTimeout(scheduleNextBar, barDuration * 1000);
-}
 
 export function createMusic(): MusicController {
+  let ctx: AudioContext | null = null;
+  let master: GainNode | null = null;
+  let playing = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let volume = 0.12;
+  let bassIndex = 0;
+  const cleanups: Array<() => void> = [];
+
+  function ensureCtx(): AudioContext {
+    if (!ctx) {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = volume;
+      master.connect(ctx.destination);
+    }
+    return ctx;
+  }
+
+  function resume() {
+    try {
+      const c = ensureCtx();
+      if (c.state === 'suspended') c.resume().catch(() => {});
+    } catch {}
+  }
+
+  // Resume konteks audio pada gesture pertama (kebijakan autoplay browser).
+  function attachUnlock() {
+    if (typeof window === 'undefined') return;
+    const handler = () => resume();
+    window.addEventListener('pointerdown', handler);
+    window.addEventListener('keydown', handler);
+    cleanups.push(() => {
+      window.removeEventListener('pointerdown', handler);
+      window.removeEventListener('keydown', handler);
+    });
+  }
+
+  function playNote(freq: number, duration: number, type: OscillatorType = 'square', gainMult = 1) {
+    try {
+      const c = ensureCtx();
+      if (c.state === 'suspended') c.resume().catch(() => {});
+      const osc = c.createOscillator();
+      const gain = c.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      const now = c.currentTime;
+      const peak = Math.max(0.0001, volume * gainMult);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain);
+      gain.connect(master!);
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
+    } catch {}
+  }
+
+  function scheduleNextBar() {
+    if (!playing) return;
+    resume();
+
+    // Bass tiap 2 beat
+    if (bassIndex % 2 === 0) {
+      playNote(bassNotes[bassIndex % bassNotes.length], 0.4, 'sawtooth', 0.6);
+    }
+    bassIndex = (bassIndex + 1) % bassNotes.length;
+
+    // Melody
+    melody.forEach((note, i) => {
+      const delay = i * 0.2;
+      setTimeout(() => {
+        if (playing) playNote(note.freq, note.dur, 'triangle', 0.5);
+      }, delay * 1000);
+    });
+
+    const barDuration = melody.length * 0.2 + 0.4;
+    timer = setTimeout(scheduleNextBar, barDuration * 1000);
+  }
+
   return {
     start() {
-      if (isMusicPlaying) return;
-      isMusicPlaying = true;
+      if (playing) return;
+      playing = true;
       bassIndex = 0;
+      attachUnlock();
+      resume();
       scheduleNextBar();
     },
     stop() {
-      isMusicPlaying = false;
-      if (musicInterval) {
-        clearTimeout(musicInterval);
-        musicInterval = null;
+      playing = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
       }
-      musicOscillators.forEach(osc => {
-        try { osc.stop(); } catch {}
-      });
-      musicOscillators = [];
+      cleanups.forEach(fn => fn());
+      cleanups.length = 0;
     },
     setVolume(vol: number) {
-      musicVolume = Math.max(0, Math.min(1, vol));
-      if (musicGain) musicGain.gain.value = musicVolume;
+      volume = Math.max(0, Math.min(1, vol));
+      if (master) master.gain.value = volume;
     },
   };
 }

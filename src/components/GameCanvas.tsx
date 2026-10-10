@@ -47,6 +47,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   const dashTrailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
   const lastHitWasMomentum = useRef(false);
   const matchOverRef = useRef(false); // guard biar game loop berhenti pas match selesai
+  const renderRef = useRef<(canvas: HTMLCanvasElement) => void>(() => {});
   
   // State untuk UI yang butuh re-render (HP, stamina)
   const [playerHp, setPlayerHp] = useState<number>(GAME_CONFIG.hp.max);
@@ -242,7 +243,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     // Hit pause: skip frame tapi tetap render
     if (hitPauseRef.current > 0) {
       hitPauseRef.current--;
-      render(canvasRef.current!);
+      renderRef.current(canvasRef.current!);
       animationRef.current = requestAnimationFrame(gameLoop);
       return;
     }
@@ -368,8 +369,8 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
       }
     }
     
-    // Render
-    render(canvasRef.current!);
+    // Render (lewat ref supaya selalu pakai state terbaru, lihat renderRef di atas)
+    renderRef.current(canvasRef.current!);
     
     animationRef.current = requestAnimationFrame(gameLoop);
   }, [onRoundEnd, playFootstep, playPunch, playHit, playRoundEnd, playerWins, targetWins]);
@@ -550,6 +551,8 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     
     ctx.restore(); // restore screen shake transform
   }, [walls, round, playerWins, targetWins]);
+
+  renderRef.current = render;
   
   // Helper: draw character dengan nama, health bar, detail
   const drawCharacter = useCallback((
@@ -729,7 +732,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   if (gameOver) {
     return (
       <div style={{ position: 'relative' }}>
-        <canvas ref={canvasRef} style={{ border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
+        <canvas ref={canvasRef} style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, height: 'auto', aspectRatio: `${GAME_CONFIG.arena.width} / ${GAME_CONFIG.arena.height}`, border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
         <div style={{
           position: 'absolute',
           top: 0, left: 0, right: 0, bottom: 0,
@@ -778,7 +781,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
       <canvas
         ref={canvasRef}
-        style={{ border: '2px solid #333', borderRadius: '8px', display: 'block' }}
+        style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, height: 'auto', aspectRatio: `${GAME_CONFIG.arena.width} / ${GAME_CONFIG.arena.height}`, border: '2px solid #333', borderRadius: '8px', display: 'block' }}
       />
       <div style={{ 
         width: GAME_CONFIG.arena.width, 
