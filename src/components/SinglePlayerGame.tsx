@@ -23,6 +23,7 @@ interface SinglePlayerGameProps {
   difficulty: BotDifficulty;
   // 1 = cuma 1 ronde, 2 = Best of 3 (butuh 2 kemenangan)
   winsNeeded?: number;
+  playerName: string;
   onMatchEnd?: (winner: 'player' | 'bot' | 'target' | 'opponent') => void;
   onBackToLobby?: () => void;
 }
@@ -30,6 +31,7 @@ interface SinglePlayerGameProps {
 export default function SinglePlayerGame({
   difficulty,
   winsNeeded = 2,
+  playerName,
   onMatchEnd,
   onBackToLobby,
 }: SinglePlayerGameProps) {
@@ -47,6 +49,11 @@ export default function SinglePlayerGame({
   const botRef = useRef<Entity>(createBot(760, -1, 'BOT'));
   botRef.current.name = 'BOT';
   const inputRef = useRef<PlayerInput>({ left: false, right: false, dash: false, punch: false });
+
+  // Sync player name from prop
+  useEffect(() => {
+    playerRef.current.name = playerName;
+  }, [playerName]);
   const botInputRef = useRef<PlayerInput>({ left: false, right: false, dash: false, punch: false });
   const botStateRef = useRef(createBotState());
   const keysPressedRef = useRef<Set<string>>(new Set());

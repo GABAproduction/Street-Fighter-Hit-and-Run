@@ -201,6 +201,7 @@ export default function Home() {
         <SinglePlayerGame
           difficulty={singleDifficulty}
           winsNeeded={singleWinsNeeded}
+          playerName={playerName}
           onMatchEnd={(w) => handleMatchEnd(w as 'player' | 'target' | 'opponent')}
           onBackToLobby={handleLeaveRoom}
         />
