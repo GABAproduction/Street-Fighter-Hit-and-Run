@@ -326,7 +326,7 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
                       <span className="text-xs text-gray-400 ml-2">Room {r.kode_room}</span>
                     </p>
                     <p className="text-xs text-gray-400">
-                      {r.player_count}/2 pemain · {r.wins_needed === 1 ? '1 ronde' : r.wins_needed === 2 ? 'Best of 3' : 'Best of 5'}
+                      {r.player_count}/2 pemain · {r.wins_needed === 1 ? '1 ronde' : 'Best of 3'}
                     </p>
                   </div>
                   <button

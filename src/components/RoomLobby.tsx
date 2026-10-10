@@ -98,7 +98,8 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
   useEffect(() => {
     const cleanup = on('wins_needed_update', (data: any) => {
       if (data && typeof data.winsNeeded === 'number') {
-        setWinsNeeded(data.winsNeeded);
+        // clamp ke format yang tersedia (1 ronde / Best of 3)
+        setWinsNeeded(data.winsNeeded >= 3 ? 2 : data.winsNeeded === 1 ? 1 : 2);
       }
     });
     return cleanup;
@@ -113,13 +114,17 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
       .eq('kode_room', roomCode.toUpperCase())
       .maybeSingle()
       .then(({ data }: any) => {
-        if (data && typeof data.wins_needed === 'number') setWinsNeeded(data.wins_needed);
+        if (data && typeof data.wins_needed === 'number') {
+          // clamp ke format yang tersedia (1 ronde / Best of 3)
+          setWinsNeeded(data.wins_needed >= 3 ? 2 : data.wins_needed === 1 ? 1 : 2);
+        }
       });
   }, [isHost, roomCode]);
 
   // Countdown lalu pindah ke game. Dipanggil di host (lokal) dan di lawan (dari broadcast).
   const beginCountdown = useCallback((wins?: number) => {
-    const finalWins = typeof wins === 'number' ? wins : winsNeeded;
+    const raw = typeof wins === 'number' ? wins : winsNeeded;
+    const finalWins = raw >= 3 ? 2 : raw === 1 ? 1 : 2; // clamp ke format yang tersedia
     setWinsNeeded(finalWins);
     setCountdown(3);
     updateRoomStatus('playing');
@@ -235,11 +240,10 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
         {isHost && (
           <div className="border-t border-gray-700 pt-4">
             <p className="text-sm text-gray-300 mb-2">Format pertarungan</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
                 { value: 1, label: '1 Ronde' },
                 { value: 2, label: 'Best of 3' },
-                { value: 3, label: 'Best of 5' },
               ].map(opt => (
                 <button
                   key={opt.value}
@@ -274,7 +278,7 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
 
         <div className="text-xs text-gray-500 text-center space-y-1">
           <p>Kontrol: ← → Jalan | Shift Dash | Spasi/X/Z Pukul</p>
-          <p>{winsNeeded === 1 ? '1 ronde' : winsNeeded === 2 ? 'Best of 3' : 'Best of 5'}. HP 100. Arena menyempit setelah 45 detik.</p>
+          <p>{winsNeeded === 1 ? '1 ronde' : 'Best of 3'}. HP 100. Arena menyempit setelah 45 detik.</p>
         </div>
       </div>
 

@@ -81,7 +81,7 @@ export default function Home() {
       setIsPlayer1(player === '1');
       if (opponent) setOpponentName(opponent);
       const winsNum = wins ? parseInt(wins, 10) : 2;
-      if (winsNum === 1 || winsNum === 2 || winsNum === 3) setWinsNeeded(winsNum);
+      if (winsNum === 1 || winsNum === 2) setWinsNeeded(winsNum);
       setPhase('multiplayer');
     }
   }, []);
@@ -96,7 +96,7 @@ export default function Home() {
   // Dipanggil dari RoomLobby saat countdown selesai.
   // isHost/opponentName hanya ada bila masuk lewat jalur room (lobby).
   const handleStartGame = (isHost?: boolean, opponent?: string, winsNeededParam?: number) => {
-    if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2 || winsNeededParam === 3)) {
+    if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2)) {
       setWinsNeeded(winsNeededParam);
     }
     if (isMultiplayer) {
@@ -106,7 +106,7 @@ export default function Home() {
       setIsMultiplayer(true);
       setIsPlayer1(isHost);
       if (opponent) setOpponentName(opponent);
-      if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2 || winsNeededParam === 3)) {
+      if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2)) {
         setWinsNeeded(winsNeededParam);
       }
       setPhase('multiplayer');
