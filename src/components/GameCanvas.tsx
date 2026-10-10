@@ -9,16 +9,14 @@ import {
   updateGame,
   resetRound,
   checkRoundEnd,
-  getHurtbox,
-  getPushbox,
   getPunchHitbox,
   createHitParticles,
   updateParticles,
   Entity,
   PlayerInput,
-  HitResult,
   Particle,
 } from '@/lib/gameLogic';
+import { drawArena, drawFighter, drawDashTrail } from '@/lib/gameArt';
 
 interface GameCanvasProps {
   onRoundEnd?: (winner: 'player' | 'target') => void;
@@ -385,8 +383,6 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     const player = playerRef.current;
     const target = targetRef.current;
     const cfg = GAME_CONFIG.character;
-    const targetCfg = GAME_CONFIG.target;
-    const juice = GAME_CONFIG.juice;
     
     // Apply screen shake
     ctx.save();
@@ -395,59 +391,11 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     // Clear canvas
     ctx.clearRect(0, 0, arena.width, arena.height);
     
-    // Background
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, arena.width, arena.height);
-    
-    // Floor
-    ctx.fillStyle = '#16213e';
-    ctx.fillRect(0, arena.floorY, arena.width, arena.height - arena.floorY);
-    
-    // Floor detail line
-    ctx.strokeStyle = '#0f3460';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, arena.floorY);
-    ctx.lineTo(arena.width, arena.floorY);
-    ctx.stroke();
-    
-    // Arena walls (batas kiri/kanan)
-    ctx.fillStyle = '#e94560';
-    ctx.fillRect(0, 0, walls.left, arena.height);
-    ctx.fillRect(walls.right, 0, arena.width - walls.right, arena.height);
-    
-    // Wall indicators
-    ctx.strokeStyle = '#fff';
-    ctx.setLineDash([10, 10]);
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(walls.left, 0);
-    ctx.lineTo(walls.left, arena.height);
-    ctx.moveTo(walls.right, 0);
-    ctx.lineTo(walls.right, arena.height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    
-    // Center line
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([20, 20]);
-    ctx.beginPath();
-    ctx.moveTo(arena.width / 2, arena.floorY);
-    ctx.lineTo(arena.width / 2, arena.height);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Arena: langit, skyline, penonton, lantai, dinding merah menyempit
+    drawArena(ctx, arena, walls, elapsedMsRef.current);
     
     // Draw dash trail (behind characters)
-    dashTrailRef.current.forEach((trail, i) => {
-      ctx.fillStyle = `rgba(59, 130, 246, ${trail.alpha * 0.3})`;
-      ctx.fillRect(
-        trail.x - cfg.width / 2,
-        trail.y,
-        cfg.width,
-        cfg.height
-      );
-    });
+    drawDashTrail(ctx, dashTrailRef.current, cfg.width, cfg.height);
     
     // Draw particles
     particlesRef.current.forEach(p => {
@@ -466,41 +414,29 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
       ctx.fill();
     });
     
-    // Draw target (dummy) - kotak merah dengan detail
-    drawCharacter(ctx, target, targetCfg, false);
+    // Draw fighters (figur prosedural beranimasi)
+    drawFighter(ctx, target, false, elapsedMsRef.current);
+    drawFighter(ctx, player, true, elapsedMsRef.current);
     
-    // Draw player - kotak biru dengan detail
-    drawCharacter(ctx, player, cfg, true);
-    
-    // Draw punch hitbox (debug - kuning)
+    // Efek pukulan (arc gerakan + kilau tinju)
     if (player.isPunching && player.punchTimer > 0) {
       const hitbox = getPunchHitbox(player);
-      const flashAlpha = player.hitFlashTimer ? 0.8 : 0.5;
-      ctx.fillStyle = `rgba(255, 255, 0, ${flashAlpha})`;
-      ctx.fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
-      
-      // Windup indicator (garis dari tangan ke hitbox)
-      ctx.strokeStyle = 'rgba(255,255,0,0.5)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
+      const extP = 1 - Math.max(0, player.punchTimer) / GAME_CONFIG.character.punchDurationFrames;
+      const cx = hitbox.x + hitbox.width / 2;
+      const cy = hitbox.y + hitbox.height / 2;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(253,224,71,0.7)';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(player.x + player.facing * 24, player.y - cfg.height + 30);
-      ctx.lineTo(hitbox.x + hitbox.width / 2, hitbox.y + hitbox.height / 2);
+      ctx.arc(cx, cy, (1 - extP) * 26 + 8, Math.PI * 0.2, Math.PI * 1.1);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(253,224,71,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, hitbox.width * 0.7, hitbox.height * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
-    
-    // Draw hurtbox (debug - hijau transparan)
-    const pHurt = getHurtbox(player);
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(pHurt.x, pHurt.y, pHurt.width, pHurt.height);
-    
-    const tHurt = getHurtbox(target);
-    ctx.strokeRect(tHurt.x, tHurt.y, tHurt.width, tHurt.height);
     
     // Momentum indicator
     if (player.momentumTimer > 0) {
@@ -554,112 +490,6 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
 
   renderRef.current = render;
   
-  // Helper: draw character dengan nama, health bar, detail
-  const drawCharacter = useCallback((
-    ctx: CanvasRenderingContext2D,
-    entity: Entity,
-    charCfg: typeof GAME_CONFIG.character | typeof GAME_CONFIG.target,
-    isPlayer: boolean
-  ) => {
-    const juice = GAME_CONFIG.juice;
-    
-    // Hit flash effect
-    if (entity.hitFlashTimer && entity.hitFlashTimer > 0) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    } else {
-      ctx.fillStyle = entity.color;
-    }
-    
-    // Body
-    ctx.fillRect(
-      entity.x - charCfg.width / 2,
-      entity.y - charCfg.height,
-      charCfg.width,
-      charCfg.height
-    );
-    
-    // Facing indicator (eyes)
-    ctx.fillStyle = '#fff';
-    const eyeOffset = entity.facing === 1 ? 12 : -12;
-    const eyeY = entity.y - charCfg.height + 22;
-    ctx.fillRect(entity.x + eyeOffset, eyeY, 6, 6);
-    
-    // Facing direction arrow (kecil di dada)
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(entity.facing === 1 ? '▶' : '◀', entity.x, entity.y - charCfg.height / 2 + 4);
-    ctx.textAlign = 'left';
-    
-    // Dash effect lines
-    if (isPlayer && entity.isDashing) {
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
-      ctx.lineWidth = 3;
-      for (let i = 1; i <= 4; i++) {
-        const offsetX = -entity.facing * i * 10;
-        ctx.beginPath();
-        ctx.moveTo(entity.x + offsetX, entity.y - charCfg.height / 2);
-        ctx.lineTo(entity.x + offsetX - 15, entity.y - charCfg.height / 2);
-        ctx.stroke();
-      }
-    }
-    
-    // Health bar di atas kepala
-    if (juice.showHealthBar) {
-      const barW = juice.healthBarWidth;
-      const barH = juice.healthBarHeight;
-      const barX = entity.x - barW / 2;
-      const barY = entity.y - charCfg.height - juice.healthBarOffsetY;
-      
-      // Background
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      
-      // HP bar
-      const hpPct = entity.hp / entity.maxHp;
-      const hpColor = hpPct > 0.6 ? '#22c55e' : hpPct > 0.3 ? '#fbbf24' : '#ef4444';
-      ctx.fillStyle = hpColor;
-      ctx.fillRect(barX, barY, barW * hpPct, barH);
-      
-      // Border
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    }
-    
-    // Nama di atas health bar
-    if (juice.showName && entity.name) {
-      ctx.fillStyle = '#fff';
-      ctx.font = `${juice.nameFontSize} monospace`;
-      ctx.textAlign = 'center';
-      const nameY = entity.y - charCfg.height - juice.nameOffsetY;
-      // Text shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.fillText(entity.name, entity.x + 1, nameY + 1);
-      ctx.fillStyle = isPlayer ? '#3b82f6' : '#ef4444';
-      ctx.fillText(entity.name, entity.x, nameY);
-      ctx.textAlign = 'left';
-    }
-    
-    // Stamina bar (hanya pemain, di bawah HP bar)
-    if (isPlayer && entity.maxStamina > 0) {
-      const barW = juice.healthBarWidth;
-      const barH = 3;
-      const barX = entity.x - barW / 2;
-      const barY = entity.y - charCfg.height - juice.healthBarOffsetY + juice.healthBarHeight + 4;
-      
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      
-      const stamPct = entity.stamina / entity.maxStamina;
-      ctx.fillStyle = '#3b82f6';
-      ctx.fillRect(barX, barY, barW * stamPct, barH);
-      
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    }
-  }, []);
   
   // ============ INIT & CLEANUP ============
   

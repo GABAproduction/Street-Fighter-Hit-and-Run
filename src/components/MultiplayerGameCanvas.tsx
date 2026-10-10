@@ -9,7 +9,6 @@ import {
   updateGame,
   resetRound,
   checkRoundEnd,
-  getHurtbox,
   getPunchHitbox,
   createHitParticles,
   updateParticles,
@@ -19,6 +18,7 @@ import {
 } from '@/lib/gameLogic';
 import { saveMatch } from '@/lib/matchStore';
 import { useBattleSync } from '@/lib/realtimeSync';
+import { drawArena, drawFighter, drawDashTrail } from '@/lib/gameArt';
 
 interface MultiplayerGameCanvasProps {
   roomCode: string;
@@ -479,32 +479,13 @@ export default function MultiplayerGameCanvas({
     const myPlayer = myPlayerRef.current;
     const opponent = opponentRef.current;
     const cfg = GAME_CONFIG.character;
-    const juice = GAME_CONFIG.juice;
 
     ctx.save();
     ctx.translate(screenShakeRef.current.x, screenShakeRef.current.y);
     ctx.clearRect(0, 0, arena.width, arena.height);
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, arena.width, arena.height);
-    ctx.fillStyle = '#16213e';
-    ctx.fillRect(0, arena.floorY, arena.width, arena.height - arena.floorY);
-    ctx.strokeStyle = '#0f3460'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, arena.floorY); ctx.lineTo(arena.width, arena.floorY); ctx.stroke();
+    drawArena(ctx, arena, walls, elapsedMsRef.current);
 
-    ctx.fillStyle = '#e94560';
-    ctx.fillRect(0, 0, walls.left, arena.height);
-    ctx.fillRect(walls.right, 0, arena.width - walls.right, arena.height);
-    ctx.strokeStyle = '#fff'; ctx.setLineDash([10, 10]); ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(walls.left, 0); ctx.lineTo(walls.left, arena.height);
-    ctx.moveTo(walls.right, 0); ctx.lineTo(walls.right, arena.height); ctx.stroke(); ctx.setLineDash([]);
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1; ctx.setLineDash([20, 20]);
-    ctx.beginPath(); ctx.moveTo(arena.width / 2, arena.floorY); ctx.lineTo(arena.width / 2, arena.height); ctx.stroke(); ctx.setLineDash([]);
-
-    dashTrailRef.current.forEach(t => {
-      ctx.fillStyle = `rgba(59, 130, 246, ${t.alpha * 0.3})`;
-      ctx.fillRect(t.x - cfg.width / 2, t.y, cfg.width, cfg.height);
-    });
+    drawDashTrail(ctx, dashTrailRef.current, cfg.width, cfg.height);
 
     particlesRef.current.forEach(p => {
       const alpha = p.life / p.maxLife;
@@ -518,23 +499,28 @@ export default function MultiplayerGameCanvas({
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2); ctx.fill();
     });
 
-    drawCharacter(ctx, opponent, cfg, false);
-    drawCharacter(ctx, myPlayer, cfg, true);
+    drawFighter(ctx, opponent, false, elapsedMsRef.current);
+    drawFighter(ctx, myPlayer, true, elapsedMsRef.current);
 
     if (myPlayer.isPunching && myPlayer.punchTimer > 0) {
       const hitbox = getPunchHitbox(myPlayer);
-      const flashAlpha = myPlayer.hitFlashTimer ? 0.8 : 0.5;
-      ctx.fillStyle = `rgba(255, 255, 0, ${flashAlpha})`;
-      ctx.fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
-      ctx.strokeStyle = '#ff0'; ctx.lineWidth = 2; ctx.strokeRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
-      ctx.strokeStyle = 'rgba(255,255,0,0.5)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(myPlayer.x + myPlayer.facing * 24, myPlayer.y - cfg.height + 30);
-      ctx.lineTo(hitbox.x + hitbox.width / 2, hitbox.y + hitbox.height / 2); ctx.stroke(); ctx.setLineDash([]);
+      const extP = 1 - Math.max(0, myPlayer.punchTimer) / GAME_CONFIG.character.punchDurationFrames;
+      const cx = hitbox.x + hitbox.width / 2;
+      const cy = hitbox.y + hitbox.height / 2;
+      // lengkung gerakan tinju (mulai dari depan tangan)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(253,224,71,0.7)';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy, (1 - extP) * 26 + 8, Math.PI * 0.2, Math.PI * 1.1);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(253,224,71,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, hitbox.width * 0.7, hitbox.height * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
-
-    ctx.strokeStyle = 'rgba(0, 255, 0, 0.4)'; ctx.lineWidth = 1;
-    const myHurt = getHurtbox(myPlayer); ctx.strokeRect(myHurt.x, myHurt.y, myHurt.width, myHurt.height);
-    const oppHurt = getHurtbox(opponent); ctx.strokeRect(oppHurt.x, oppHurt.y, oppHurt.width, oppHurt.height);
 
     if (myPlayer.momentumTimer > 0) {
       ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
@@ -564,51 +550,6 @@ export default function MultiplayerGameCanvas({
 
   renderRef.current = render;
 
-  const drawCharacter = useCallback((
-    ctx: CanvasRenderingContext2D,
-    entity: Entity,
-    charCfg: typeof GAME_CONFIG.character,
-    isMe: boolean
-  ) => {
-    const juice = GAME_CONFIG.juice;
-    ctx.fillStyle = entity.hitFlashTimer && entity.hitFlashTimer > 0 ? 'rgba(255,255,255,0.6)' : entity.color;
-    ctx.fillRect(entity.x - charCfg.width / 2, entity.y - charCfg.height, charCfg.width, charCfg.height);
-    ctx.fillStyle = '#fff';
-    const eyeOffset = entity.facing === 1 ? 12 : -12;
-    ctx.fillRect(entity.x + eyeOffset, entity.y - charCfg.height + 22, 6, 6);
-    ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '14px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(entity.facing === 1 ? '▶' : '◀', entity.x, entity.y - charCfg.height / 2 + 4); ctx.textAlign = 'left';
-    if (isMe && entity.isDashing) {
-      ctx.strokeStyle = 'rgba(59,130,246,0.7)'; ctx.lineWidth = 3;
-      for (let i = 1; i <= 4; i++) {
-        const ox = -entity.facing * i * 10;
-        ctx.beginPath(); ctx.moveTo(entity.x + ox, entity.y - charCfg.height / 2);
-        ctx.lineTo(entity.x + ox - 15, entity.y - charCfg.height / 2); ctx.stroke();
-      }
-    }
-    if (juice.showHealthBar) {
-      const barW = juice.healthBarWidth, barH = juice.healthBarHeight;
-      const barX = entity.x - barW / 2, barY = entity.y - charCfg.height - juice.healthBarOffsetY;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      const hpPct = entity.hp / entity.maxHp;
-      ctx.fillStyle = hpPct > 0.6 ? '#22c55e' : hpPct > 0.3 ? '#fbbf24' : '#ef4444';
-      ctx.fillRect(barX, barY, barW * hpPct, barH);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    }
-    if (juice.showName && entity.name) {
-      ctx.fillStyle = '#fff'; ctx.font = `${juice.nameFontSize} monospace`; ctx.textAlign = 'center';
-      const nameY = entity.y - charCfg.height - juice.nameOffsetY;
-      ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillText(entity.name, entity.x + 1, nameY + 1);
-      ctx.fillStyle = isMe ? '#3b82f6' : '#ef4444'; ctx.fillText(entity.name, entity.x, nameY); ctx.textAlign = 'left';
-    }
-    if (isMe && entity.maxStamina > 0) {
-      const barW = juice.healthBarWidth, barH = 3;
-      const barX = entity.x - barW / 2, barY = entity.y - charCfg.height - juice.healthBarOffsetY + juice.healthBarHeight + 4;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = '#3b82f6'; ctx.fillRect(barX, barY, barW * (entity.stamina / entity.maxStamina), barH);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
-    }
-  }, []);
 
   // ---------- init ----------
   useEffect(() => {
