@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { getOrCreateUserId, generateDefaultName, generateRoomCode } from '@/lib/realtimeHooks';
+import { generateDefaultName, generateRoomCode } from '@/lib/realtimeHooks';
 import { supabase } from '@/lib/supabaseClient';
+import GamePreview from '@/components/GamePreview';
 
 interface LobbyProps {
   onEnterRoom: (roomCode: string, name: string) => void;
@@ -16,8 +16,27 @@ interface PublicRoom {
   wins_needed: number;
 }
 
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80">
+      {children}
+    </span>
+  );
+}
+
+function InfoCard({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-xl">{icon}</span>
+        <h3 className="font-bold tracking-wide">{title}</h3>
+      </div>
+      <div className="text-sm leading-relaxed text-white/65">{children}</div>
+    </div>
+  );
+}
+
 export default function Lobby({ onEnterRoom }: LobbyProps) {
-  const router = useRouter();
   const [name, setName] = useState('');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [creating, setCreating] = useState(false);
@@ -164,185 +183,306 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-mono flex flex-col items-center py-12 px-4">
-      <header className="mb-8 text-center">
-        <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-2">
-          STREET FIGHTER : HIT AND RUN
-        </h1>
-        <p className="text-gray-400 text-lg">Multiplayer 1v1 - Masuk Room</p>
-      </header>
-
-      <div className="w-full max-w-md bg-gray-800 rounded-lg p-6 border border-gray-700 space-y-6">
-        {/* Nama */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Nama Pemain
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={generateDefaultName()}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            maxLength={20}
-            autoFocus
-          />
-          <p className="text-xs text-gray-500 mt-1">Maks 20 karakter. Kosong = nama random.</p>
-        </div>
-
-        <div className="border-t border-gray-700 pt-6 space-y-4">
-          {/* Jenis room */}
-          <div>
-            <p className="text-sm font-medium text-gray-300 mb-2">Jenis Room</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setIsPublicRoom(true)}
-                className={`py-3 px-4 rounded-lg border font-bold text-sm transition-colors ${
-                  isPublicRoom
-                    ? 'bg-green-600 border-green-500 text-white'
-                    : 'bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500'
-                }`}
-              >
-                🌍 Publik
-              </button>
-              <button
-                onClick={() => setIsPublicRoom(false)}
-                className={`py-3 px-4 rounded-lg border font-bold text-sm transition-colors ${
-                  !isPublicRoom
-                    ? 'bg-yellow-600 border-yellow-500 text-white'
-                    : 'bg-gray-700 border-gray-600 text-gray-400 hover:border-gray-500'
-                }`}
-              >
-                🔒 Privat
-              </button>
+    <div
+      className="min-h-screen text-white"
+      style={{
+        background:
+          'radial-gradient(1200px 600px at 15% -10%, rgba(59,130,246,0.25), transparent 60%), radial-gradient(1000px 500px at 90% 0%, rgba(217,70,239,0.22), transparent 60%), linear-gradient(180deg, #070714 0%, #0b0b1e 45%, #05050f 100%)',
+      }}
+    >
+      <div className="mx-auto max-w-6xl px-4 py-8 md:py-10">
+        {/* NAV */}
+        <nav className="mb-10 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-fuchsia-600 text-2xl shadow-lg shadow-fuchsia-900/40">
+              🥊
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {isPublicRoom
-                ? 'Room tampil di daftar room publik.'
-                : 'Hanya bisa masuk lewat kode.'}
-            </p>
+            <div className="leading-tight">
+              <p className="font-black tracking-widest">STREET FIGHTER</p>
+              <p className="text-[11px] tracking-[0.35em] text-white/50">HIT &amp; RUN</p>
+            </div>
           </div>
+          <div className="hidden items-center gap-2 sm:flex">
+            <Chip>🟢 Realtime</Chip>
+            <Chip>🎮 1v1</Chip>
+            <Chip>🕹️ Tanpa Login</Chip>
+          </div>
+        </nav>
 
-          {/* Buat Room */}
-          <div className="text-center">
-            <button
-              onClick={handleCreateRoom}
-              disabled={creating}
-              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              {creating ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Membuat...
-                </>
-              ) : (
-                '🎮 BUAT ROOM BARU'
-              )}
-            </button>
+        {/* HERO */}
+        <section className="mb-16 grid items-center gap-8 lg:grid-cols-2">
+          <div>
+            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-200">
+              ⚡ Fighting 2D Multiplayer Online
+            </span>
+            <h1 className="mb-4 text-4xl font-black leading-[0.95] tracking-tight md:text-6xl">
+              Duel Cepat,
+              <br />
+              <span className="bg-gradient-to-r from-blue-400 via-fuchsia-400 to-amber-300 bg-clip-text text-transparent">
+                Pukul &amp; Lari!
+              </span>
+            </h1>
+            <p className="mb-6 max-w-xl text-lg leading-relaxed text-white/70">
+              Bertarung 1&nbsp;lawan&nbsp;1 secara real-time. Kumpulkan <strong className="text-white">momentum</strong> lewat dash,
+              hantam lawan sebelum <strong className="text-white">arena menyempit</strong>, dan rebut kemenangan
+              di mode <strong className="text-white">1 Ronde</strong> atau <strong className="text-white">Best of 3</strong>.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Chip>🌐 Room Publik &amp; Privat</Chip>
+              <Chip>⏱️ Arena menyempit 45s</Chip>
+              <Chip>💥 Bonus Momentum Dash</Chip>
+              <Chip>📱 Main di Browser</Chip>
+            </div>
           </div>
 
           <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-700" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-gray-800 px-2 text-gray-500">ATAU</span>
+            <div className="absolute -inset-3 rounded-3xl bg-gradient-to-r from-blue-600/30 via-fuchsia-600/30 to-amber-500/30 blur-2xl" />
+            <div className="relative rounded-3xl border border-white/15 bg-black/40 p-2 shadow-2xl">
+              <GamePreview label="GAMEPLAY" />
             </div>
           </div>
+        </section>
 
-          {/* Gabung Room */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Kode Room (4-6 huruf/angka)
-            </label>
-            <div className="flex gap-2">
+        {/* MAIN: PLAY + SIDE INFO */}
+        <section className="mb-16 grid gap-6 lg:grid-cols-3">
+          {/* Panel bermain */}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur lg:col-span-2">
+            {/* Nama */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-white/80">Nama Pemain</label>
               <input
                 type="text"
-                value={roomCodeInput}
-                onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Contoh: A7K9M"
-                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg tracking-widest"
-                maxLength={6}
-                style={{ textTransform: 'uppercase' }}
+                placeholder={generateDefaultName()}
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-white placeholder-white/30 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40"
+                maxLength={20}
+                autoFocus
               />
-              <button
-                onClick={handleJoinRoom}
-                disabled={joining}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-3 px-6 rounded-lg transition-colors whitespace-nowrap"
-              >
-                {joining ? 'Masuk...' : 'GABUNG'}
-              </button>
+              <p className="mt-1 text-xs text-white/40">Maks 20 karakter. Kosong = nama random.</p>
             </div>
-          </div>
 
-          {/* Daftar room publik */}
-          <button
-            onClick={() => setShowRoomList(v => !v)}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-          >
-            {showRoomList ? '▲ Sembunyikan Daftar Room' : '📋 LIHAT ROOM PUBLIK'}
-          </button>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-900/50 border border-red-700 text-red-300 rounded-lg p-3 text-sm text-center">
-            {error}
-          </div>
-        )}
-
-        {/* Info */}
-        <div className="text-xs text-gray-500 text-center space-y-1 pt-2 border-t border-gray-700">
-          <p>Room code: 5 karakter (huruf/angka, case-insensitive)</p>
-          <p>Tidak perlu login. Data tersimpan di browser.</p>
-        </div>
-      </div>
-
-      {showRoomList && (
-        <div className="w-full max-w-md bg-gray-800 rounded-lg p-6 border border-gray-700 mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold">ROOM PUBLIK</h2>
-            <button onClick={fetchPublicRooms} className="text-xs text-gray-400 hover:text-white border border-gray-600 rounded px-2 py-1">
-              🔄 Muat ulang
-            </button>
-          </div>
-          {publicRooms.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-600 rounded-lg">
-              Belum ada room publik yang menunggu.
-              <p className="text-xs mt-2">Buat room baru dengan jenis <strong>Publik</strong> agar teman bisa menemukannya.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {publicRooms.map(r => (
-                <div key={r.kode_room} className="flex items-center justify-between bg-gray-700 rounded-lg p-4">
-                  <div>
-                    <p className="font-bold text-white">
-                      {r.host_name || 'Host'}
-                      <span className="text-xs text-gray-400 ml-2">Room {r.kode_room}</span>
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {r.player_count}/2 pemain · {r.wins_needed === 1 ? '1 ronde' : 'Best of 3'}
-                    </p>
-                  </div>
+            <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
+              {/* Jenis room */}
+              <div>
+                <p className="mb-2 text-sm font-medium text-white/80">Jenis Room</p>
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => handleJoinFromList(r.kode_room)}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-lg text-sm"
+                    onClick={() => setIsPublicRoom(true)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                      isPublicRoom
+                        ? 'border-green-400/60 bg-green-500/20 text-green-100 shadow-inner'
+                        : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                    }`}
                   >
-                    MASUK
+                    🌍 Publik
+                  </button>
+                  <button
+                    onClick={() => setIsPublicRoom(false)}
+                    className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                      !isPublicRoom
+                        ? 'border-amber-400/60 bg-amber-500/20 text-amber-100 shadow-inner'
+                        : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                    }`}
+                  >
+                    🔒 Privat
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                <p className="mt-1 text-xs text-white/40">
+                  {isPublicRoom ? 'Room tampil di daftar room publik.' : 'Hanya bisa masuk lewat kode.'}
+                </p>
+              </div>
 
-      <footer className="mt-12 text-center text-gray-500 text-sm"><p>Street Fighter : Hit and Run</p></footer>
+              {/* Buat Room */}
+              <button
+                onClick={handleCreateRoom}
+                disabled={creating}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-4 text-lg font-black tracking-wide shadow-lg shadow-emerald-900/40 transition hover:from-green-400 hover:to-emerald-500 disabled:opacity-60"
+              >
+                {creating ? 'MEMBUAT...' : '🎮 BUAT ROOM BARU'}
+              </button>
+
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-white/10" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-[#0b0b1e] px-3 tracking-widest text-white/40">ATAU</span>
+                </div>
+              </div>
+
+              {/* Gabung Room */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-white/80">Kode Room (4-6 huruf/angka)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={roomCodeInput}
+                    onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Contoh: A7K9M"
+                    className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-center text-lg tracking-[0.3em] text-white placeholder-white/25 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40"
+                    maxLength={6}
+                    style={{ textTransform: 'uppercase' }}
+                  />
+                  <button
+                    onClick={handleJoinRoom}
+                    disabled={joining}
+                    className="whitespace-nowrap rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 font-black tracking-wide shadow-lg shadow-blue-900/40 transition hover:from-blue-400 hover:to-indigo-500 disabled:opacity-60"
+                  >
+                    {joining ? 'MASUK...' : 'GABUNG'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Daftar room publik */}
+              <button
+                onClick={() => setShowRoomList((v) => !v)}
+                className="w-full rounded-xl border border-purple-400/40 bg-purple-500/15 py-3 font-bold text-purple-100 transition hover:bg-purple-500/25"
+              >
+                {showRoomList ? '▲ Sembunyikan Daftar Room' : '📋 LIHAT ROOM PUBLIK'}
+              </button>
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/15 p-3 text-center text-sm text-red-200">
+                {error}
+              </div>
+            )}
+
+            <p className="mt-4 text-center text-xs text-white/35">
+              Tidak perlu login. Data nama tersimpan di browser.
+            </p>
+
+            {/* Daftar room publik */}
+            {showRoomList && (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-bold tracking-wide">ROOM PUBLIK</h2>
+                  <button
+                    onClick={fetchPublicRooms}
+                    className="rounded-md border border-white/15 px-2 py-1 text-xs text-white/60 transition hover:text-white"
+                  >
+                    🔄 Muat ulang
+                  </button>
+                </div>
+                {publicRooms.length === 0 ? (
+                  <div className="rounded-xl border-2 border-dashed border-white/15 py-8 text-center text-white/45">
+                    Belum ada room publik yang menunggu.
+                    <p className="mt-2 text-xs">
+                      Buat room baru dengan jenis <strong className="text-white/70">Publik</strong> agar teman bisa menemukannya.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {publicRooms.map((r) => (
+                      <div
+                        key={r.kode_room}
+                        className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-4"
+                      >
+                        <div>
+                          <p className="font-bold">
+                            {r.host_name || 'Host'}
+                            <span className="ml-2 text-xs text-white/40">Room {r.kode_room}</span>
+                          </p>
+                          <p className="text-xs text-white/45">
+                            {r.player_count}/2 pemain · {r.wins_needed === 1 ? '1 ronde' : 'Best of 3'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleJoinFromList(r.kode_room)}
+                          className="rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-2 text-sm font-bold shadow transition hover:from-green-400 hover:to-emerald-500"
+                        >
+                          MASUK
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Sisi: preview + info */}
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-white/10 bg-black/40 p-2 shadow-xl">
+              <GamePreview staticFrame label="ARENA MENYEMPIT" />
+            </div>
+
+            <InfoCard icon="🚀" title="Cara Bermain">
+              <ol className="list-decimal space-y-1 pl-4">
+                <li>Buat room (pilih Publik/Privat) atau masukkan kode teman.</li>
+                <li>Tunggu 2 pemain, lalu host pilih format dan mulai.</li>
+                <li>Setelah hitungan <strong>3-2-1 FIGHT!</strong> bertarunglah.</li>
+                <li>Kalahkan lawan sampai HP-nya habis untuk merebut ronde.</li>
+              </ol>
+            </InfoCard>
+
+            <InfoCard icon="⌨️" title="Kontrol">
+              <div className="space-y-1 font-mono text-xs">
+                <p>← → &nbsp;: Jalan</p>
+                <p>Shift&nbsp;: Dash (isi momentum)</p>
+                <p>Spasi / X / Z : Pukul</p>
+              </div>
+            </InfoCard>
+          </div>
+        </section>
+
+        {/* FITUR */}
+        <section className="mb-16">
+          <h2 className="mb-6 text-center text-2xl font-black tracking-wide md:text-3xl">Kenapa Seru?</h2>
+          <div className="grid gap-6 md:grid-cols-3">
+            <InfoCard icon="⚔️" title="Duel Real-time">
+              Pertarungan 1v1 langsung lewat koneksi real-time. Tanpa login, cukup pakai kode room.
+            </InfoCard>
+            <InfoCard icon="🔥" title="Momentum Dash">
+              Dash mengisi momentum — pukulan setelah dash memberi damage lebih besar. Risiko &amp; imbalan!
+            </InfoCard>
+            <InfoCard icon="🗺️" title="Arena Menyempit">
+              Setelah 45 detik dinding merah mulai menghimpit. Jadikan lawan terkunci di sudut!
+            </InfoCard>
+          </div>
+        </section>
+
+        {/* ATURAN / INFO */}
+        <section className="mb-16 rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur md:p-8">
+          <h2 className="mb-6 text-2xl font-black tracking-wide">Info &amp; Aturan Pertandingan</h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-sm font-bold text-blue-300">Format Ronde</p>
+              <p className="text-sm text-white/60">
+                <strong>1 Ronde</strong> (sekali menang langsung juara) atau <strong>Best of 3</strong>
+                {' '}(butuh 2 kemenangan).
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-fuchsia-300">HP &amp; Damage</p>
+              <p className="text-sm text-white/60">
+                HP maksimal 100. Pukulan dasar 12 damage, bisa naik hingga ~1.6x saat momentum.
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-amber-300">Penalti Jarak Dekat</p>
+              <p className="text-sm text-white/60">
+                Berdiri terlalu dekat membuat damage berkurang hingga 60%. Jaga jarak untuk pukulan penuh!
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-emerald-300">Room &amp; Lawan</p>
+              <p className="text-sm text-white/60">
+                Room <strong>Publik</strong> tampil di daftar; <strong>Privat</strong> hanya lewat kode.
+                Lawan yang putus koneksi akan ditandai dan bisa Anda tinggalkan.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <footer className="border-t border-white/10 pt-6 text-center text-sm text-white/40">
+          <p>Street Fighter : Hit and Run — dibangun dengan HTML5 Canvas &amp; Supabase Realtime.</p>
+        </footer>
+      </div>
     </div>
   );
 }

@@ -62,6 +62,9 @@ export default function MultiplayerGameCanvas({
   const dashTrailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
   const matchOverRef = useRef(false);
   const awaitingConfirmRef = useRef(false);
+  // mirror state gameOver ke ref supaya gameLoop/applyRoundWin stabil (tidak memicu
+  // re-run effect init yang akan me-restart musik & reset elapsed).
+  const gameOverRef = useRef(false);
   const roundScoresRef = useRef<Array<{ ronde: number; pemenang: string }>>([]);
   const startTimeRef = useRef<string>(new Date().toISOString());
   const matchSavedRef = useRef(false);
@@ -90,6 +93,9 @@ export default function MultiplayerGameCanvas({
   const [connectionWarning, setConnectionWarning] = useState('');
   // Hitung mundur saat lawan terputus; setelah 30 detik muncul tombol keluar
   const [disconnectCountdown, setDisconnectCountdown] = useState<number>(0);
+  const [musicOn, setMusicOn] = useState(true);
+
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
 
   useEffect(() => { winsRef.current = { my: myWins, opp: opponentWins }; }, [myWins, opponentWins]);
   useEffect(() => { roundRef.current = round; }, [round]);
@@ -195,7 +201,7 @@ export default function MultiplayerGameCanvas({
   }, [roomCode, isPlayer1, myName, opponentName]);
 
   const applyRoundWin = useCallback((isMeWinner: boolean) => {
-    if (gameOver) return;
+    if (gameOverRef.current) return;
     if (roundScoresRef.current.length >= roundRef.current) return;
 
     const winnerName = isMeWinner ? myName : opponentName;
@@ -229,7 +235,7 @@ export default function MultiplayerGameCanvas({
       myPlayerRef.current.hp = GAME_CONFIG.hp.max;
       opponentRef.current.hp = GAME_CONFIG.hp.max;
     }
-  }, [gameOver, myName, opponentName, playRoundEnd, onMatchEnd, doSaveMatch, isPlayer1, winsNeeded]);
+  }, [myName, opponentName, playRoundEnd, onMatchEnd, doSaveMatch, isPlayer1, winsNeeded]);
 
   // ---------- back to lobby ----------
   const handleBackToLobby = useCallback(() => {
@@ -276,6 +282,15 @@ export default function MultiplayerGameCanvas({
     handleBackToLobbyRef.current?.();
   }, []);
 
+  const toggleMusic = useCallback(() => {
+    setMusicOn((prev) => {
+      const next = !prev;
+      if (next) musicRef.current?.start();
+      else musicRef.current?.stop();
+      return next;
+    });
+  }, []);
+
   const handleOpponentHit = useCallback((damage: number, hitX: number, hitY: number, isMomentum: boolean) => {
     const myPlayer = myPlayerRef.current;
     myPlayer.hp = Math.max(0, myPlayer.hp - damage);
@@ -320,11 +335,9 @@ export default function MultiplayerGameCanvas({
   // ---------- battle sync hook ----------
   const {
     broadcastPosition,
-    broadcastAction,
     broadcastHit,
     broadcastRoundEnd,
     broadcastMatchEnd,
-    broadcastRematchVote,
     broadcastRoomAbort,
     interpolateOpponent,
   } = useBattleSync({
@@ -370,7 +383,7 @@ export default function MultiplayerGameCanvas({
 
   // ---------- game loop ----------
   const gameLoop = useCallback((timestamp: number) => {
-    if (matchOverRef.current && gameOver) return;
+    if (matchOverRef.current && gameOverRef.current) return;
     if (!lastTimeRef.current) lastTimeRef.current = timestamp;
     const deltaMs = timestamp - lastTimeRef.current;
     lastTimeRef.current = timestamp;
@@ -429,11 +442,6 @@ export default function MultiplayerGameCanvas({
 
     interpolateOpponent(0.3);
     broadcastPosition();
-    broadcastAction({
-      isPunching: myPlayer.isPunching,
-      punchTimer: myPlayer.punchTimer,
-      momentumTimer: myPlayer.momentumTimer,
-    });
 
     setWalls({ left: result.leftWall, right: result.right });
     setMyHp(myPlayer.hp);
@@ -466,8 +474,7 @@ export default function MultiplayerGameCanvas({
     renderRef.current(canvasRef.current!);
     animationRef.current = requestAnimationFrame(gameLoop);
   }, [
-    gameOver,
-    broadcastPosition, broadcastAction, broadcastHit, broadcastRoundEnd,
+    broadcastPosition, broadcastHit, broadcastRoundEnd,
     interpolateOpponent, playFootstep, playPunch, playHit, applyRoundWin,
   ]);
 
@@ -558,7 +565,7 @@ export default function MultiplayerGameCanvas({
     canvas.width = GAME_CONFIG.arena.width;
     canvas.height = GAME_CONFIG.arena.height;
     musicRef.current = createMusic();
-    musicRef.current.setVolume(0.08);
+    musicRef.current.setVolume(0.4);
     musicRef.current.start();
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -577,8 +584,8 @@ export default function MultiplayerGameCanvas({
 
   if (gameOver) {
     return (
-      <div style={{ position: 'relative' }}>
-        <canvas ref={canvasRef} style={{ border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
+      <div style={{ position: 'relative', width: '100%', maxWidth: GAME_CONFIG.arena.width }}>
+        <canvas ref={canvasRef} style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, height: 'auto', aspectRatio: `${GAME_CONFIG.arena.width} / ${GAME_CONFIG.arena.height}`, border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', color: '#fff', fontFamily: 'monospace', padding: 16 }}>
           <h2 style={{ fontSize: '48px', margin: 0, color: winner === 'player' ? '#22c55e' : '#ef4444' }}>
             {winner === 'player' ? 'MENANG!' : 'KALAH!'}
@@ -607,7 +614,16 @@ export default function MultiplayerGameCanvas({
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
       <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '12px', color: opponentConnected ? '#22c55e' : '#f87171' }}>
         <span>● {opponentConnected ? 'Terhubung' : `Terputus${disconnectCountdown > 0 ? ` — ${disconnectCountdown}s` : ''}`}</span>
-        <span>Room {roomCode} — {isPlayer1 ? 'P1' : 'P2'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Room {roomCode} — {isPlayer1 ? 'P1' : 'P2'}
+          <button
+            onClick={toggleMusic}
+            title={musicOn ? 'Matikan musik' : 'Nyalakan musik'}
+            style={{ fontFamily: 'monospace', fontSize: '12px', background: 'transparent', color: '#a1a1aa', border: '1px solid #3f3f46', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+          >
+            {musicOn ? '🔊' : '🔇'}
+          </button>
+        </span>
       </div>
       {connectionWarning && <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, background: '#7f1d1d', color: '#fecaca', fontFamily: 'monospace', fontSize: '12px', padding: '6px 10px', borderRadius: 6, textAlign: 'center' }}>{connectionWarning}{!opponentConnected && disconnectCountdown <= 0 && (
         <button onClick={handleAbort} style={{ display: 'block', margin: '8px auto 0', padding: '8px 20px', fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>KELUAR</button>

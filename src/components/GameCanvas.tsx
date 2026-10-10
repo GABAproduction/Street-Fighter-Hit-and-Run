@@ -45,6 +45,9 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   const dashTrailRef = useRef<Array<{ x: number; y: number; alpha: number }>>([]);
   const lastHitWasMomentum = useRef(false);
   const matchOverRef = useRef(false); // guard biar game loop berhenti pas match selesai
+  // mirror gameOver ke ref supaya gameLoop stabil (effect init tidak re-run tiap ronde
+  // yang tadinya me-restart musik & animation loop).
+  const gameOverRef = useRef(false);
   const renderRef = useRef<(canvas: HTMLCanvasElement) => void>(() => {});
   
   // State untuk UI yang butuh re-render (HP, stamina)
@@ -57,6 +60,9 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   const [targetWins, setTargetWins] = useState<number>(0);
   const [gameOver, setGameOver] = useState<boolean>(false);
   const [winner, setWinner] = useState<'player' | 'target' | null>(null);
+  const [musicOn, setMusicOn] = useState(true);
+
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
   
   // ============ AUDIO HELPERS ============
   
@@ -230,7 +236,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   
   const gameLoop = useCallback((timestamp: number) => {
     // Stop loop kalau match sudah selesai
-    if (matchOverRef.current && gameOver) {
+    if (matchOverRef.current && gameOverRef.current) {
       return;
     }
     
@@ -371,7 +377,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     renderRef.current(canvasRef.current!);
     
     animationRef.current = requestAnimationFrame(gameLoop);
-  }, [onRoundEnd, playFootstep, playPunch, playHit, playRoundEnd, playerWins, targetWins]);
+  }, [onRoundEnd, playFootstep, playPunch, playHit, playRoundEnd]);
   
   // ============ RENDER ============
   
@@ -503,7 +509,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     
     // Music
     musicRef.current = createMusic();
-    musicRef.current.setVolume(0.08);
+    musicRef.current.setVolume(0.4);
     musicRef.current.start();
 
     // Event listeners
@@ -556,6 +562,15 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     // Restart game loop
     animationRef.current = requestAnimationFrame(gameLoop);
   }, [gameLoop]);
+
+  const toggleMusic = useCallback(() => {
+    setMusicOn((prev) => {
+      const next = !prev;
+      if (next) musicRef.current?.start();
+      else musicRef.current?.stop();
+      return next;
+    });
+  }, []);
   
   // ============ RENDER WRAPPER ============
   
@@ -608,13 +623,23 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   }
   
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', width: '100%' }}>
+      <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={toggleMusic}
+          title={musicOn ? 'Matikan musik' : 'Nyalakan musik'}
+          style={{ fontFamily: 'monospace', fontSize: '12px', background: 'transparent', color: '#a1a1aa', border: '1px solid #3f3f46', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+        >
+          {musicOn ? '🔊 Musik' : '🔇 Musik'}
+        </button>
+      </div>
       <canvas
         ref={canvasRef}
         style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, height: 'auto', aspectRatio: `${GAME_CONFIG.arena.width} / ${GAME_CONFIG.arena.height}`, border: '2px solid #333', borderRadius: '8px', display: 'block' }}
       />
       <div style={{ 
-        width: GAME_CONFIG.arena.width, 
+        width: '100%',
+        maxWidth: GAME_CONFIG.arena.width, 
         display: 'flex', 
         justifyContent: 'space-between', 
         fontFamily: 'monospace',
@@ -630,7 +655,8 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
         </div>
       </div>
       <div style={{ 
-        width: GAME_CONFIG.arena.width, 
+        width: '100%',
+        maxWidth: GAME_CONFIG.arena.width, 
         fontFamily: 'monospace', 
         fontSize: '12px', 
         color: '#888',

@@ -38,8 +38,9 @@ export function createMusic(): MusicController {
   let master: GainNode | null = null;
   let playing = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let volume = 0.12;
+  let volume = 0.45;
   let bassIndex = 0;
+  let started = false; // sudah mulai menjadwalkan bar?
   const cleanups: Array<() => void> = [];
 
   function ensureCtx(): AudioContext {
@@ -53,23 +54,42 @@ export function createMusic(): MusicController {
     return ctx;
   }
 
-  function resume() {
+  function resume(): Promise<void> {
     try {
       const c = ensureCtx();
-      if (c.state === 'suspended') c.resume().catch(() => {});
+      if (c.state === 'suspended') return c.resume().catch(() => {});
     } catch {}
+    return Promise.resolve();
   }
 
   // Resume konteks audio pada gesture pertama (kebijakan autoplay browser).
+  // Setelah konteks benar-benar jalan, baru mulai menjadwalkan bar pertama —
+  // supaya nada tidak menumpuk/berbunyi serentak saat konteks masih suspended.
   function attachUnlock() {
     if (typeof window === 'undefined') return;
-    const handler = () => resume();
+    const handler = () => {
+      resume();
+      if (playing) beginScheduling();
+    };
     window.addEventListener('pointerdown', handler);
     window.addEventListener('keydown', handler);
     cleanups.push(() => {
       window.removeEventListener('pointerdown', handler);
       window.removeEventListener('keydown', handler);
     });
+  }
+
+  function beginScheduling() {
+    if (started || !playing) return;
+    const c = ensureCtx();
+    if (c.state !== 'running') {
+      // konteks belum jalan (belum ada gesture) — coba lagi sebentar lagi
+      resume();
+      setTimeout(() => { if (!started && playing) beginScheduling(); }, 80);
+      return;
+    }
+    started = true;
+    scheduleNextBar();
   }
 
   function playNote(freq: number, duration: number, type: OscillatorType = 'square', gainMult = 1) {
@@ -98,7 +118,7 @@ export function createMusic(): MusicController {
 
     // Bass tiap 2 beat
     if (bassIndex % 2 === 0) {
-      playNote(bassNotes[bassIndex % bassNotes.length], 0.4, 'sawtooth', 0.6);
+      playNote(bassNotes[bassIndex % bassNotes.length], 0.4, 'sawtooth', 0.7);
     }
     bassIndex = (bassIndex + 1) % bassNotes.length;
 
@@ -106,7 +126,7 @@ export function createMusic(): MusicController {
     melody.forEach((note, i) => {
       const delay = i * 0.2;
       setTimeout(() => {
-        if (playing) playNote(note.freq, note.dur, 'triangle', 0.5);
+        if (playing) playNote(note.freq, note.dur, 'triangle', 0.6);
       }, delay * 1000);
     });
 
@@ -118,13 +138,19 @@ export function createMusic(): MusicController {
     start() {
       if (playing) return;
       playing = true;
+      started = false;
       bassIndex = 0;
       attachUnlock();
-      resume();
-      scheduleNextBar();
+      const c = ensureCtx();
+      if (c.state === 'running') {
+        beginScheduling();
+      } else {
+        resume();
+      }
     },
     stop() {
       playing = false;
+      started = false;
       if (timer) {
         clearTimeout(timer);
         timer = null;

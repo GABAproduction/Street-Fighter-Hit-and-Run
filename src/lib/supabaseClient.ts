@@ -23,7 +23,7 @@ export function getSupabaseClient() {
       },
       realtime: {
         params: {
-          eventsPerSecond: 20, // broadcast rate limit
+          eventsPerSecond: 30, // broadcast rate limit (posisi ~20/detik + event lain)
         },
       },
     });

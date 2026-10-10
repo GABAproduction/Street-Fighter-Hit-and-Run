@@ -183,6 +183,9 @@ export function useBattleSync({
       hp: payload.hp, stamina: payload.stamina,
       isMoving: payload.isMoving, isDashing: payload.isDashing,
       dashDirection: payload.dashDirection, lastUpdate: now,
+      isPunching: payload.isPunching,
+      punchTimer: payload.punchTimer,
+      momentumTimer: payload.momentumTimer,
     };
     opponentPlayer.x = payload.x;
     opponentPlayer.y = payload.y;
@@ -192,6 +195,11 @@ export function useBattleSync({
     opponentPlayer.isMoving = payload.isMoving;
     opponentPlayer.isDashing = payload.isDashing;
     opponentPlayer.dashDirection = payload.dashDirection;
+    // Aksi pukul/momentum ikut menumpang di pesan posisi (yang sudah di-throttle)
+    // supaya tidak mengirim pesan terpisah tiap frame (dulu ~60 pesan/detik).
+    opponentPlayer.isPunching = payload.isPunching ?? false;
+    opponentPlayer.punchTimer = payload.punchTimer ?? 0;
+    opponentPlayer.momentumTimer = payload.momentumTimer ?? 0;
   };
 
   const updateOpponentAction = (payload: any) => {
@@ -218,6 +226,9 @@ export function useBattleSync({
           hp: myPlayer.hp, stamina: myPlayer.stamina,
           isMoving: myPlayer.isMoving, isDashing: myPlayer.isDashing,
           dashDirection: myPlayer.dashDirection,
+          isPunching: myPlayer.isPunching,
+          punchTimer: myPlayer.punchTimer,
+          momentumTimer: myPlayer.momentumTimer,
         },
         sender_id: myUserId, timestamp: now,
       },
