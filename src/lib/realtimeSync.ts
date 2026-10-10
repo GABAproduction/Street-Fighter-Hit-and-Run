@@ -6,7 +6,7 @@ import { GAME_CONFIG } from './gameConfig';
 import { Entity, PlayerInput } from './gameLogic';
 
 export interface GameBroadcast {
-  type: 'position' | 'action' | 'hit' | 'round_start' | 'round_end' | 'match_end' | 'player_ready' | 'rematch_vote';
+  type: 'position' | 'action' | 'hit' | 'round_start' | 'round_end' | 'match_end' | 'player_ready' | 'rematch_vote' | 'room_abort';
   payload: any;
   sender_id: string;
   timestamp: number;
@@ -37,6 +37,7 @@ interface UseBattleSyncProps {
   onMatchEnd: (winner: 'player' | 'target') => void;
   onRematchVote?: (wantsRematch: boolean, fromUserId: string) => void;
   onOpponentPresenceChange?: (present: boolean) => void;
+  onRoomAbort?: () => void;
 }
 
 export function useBattleSync({
@@ -49,6 +50,7 @@ export function useBattleSync({
   onMatchEnd,
   onRematchVote,
   onOpponentPresenceChange,
+  onRoomAbort,
 }: UseBattleSyncProps) {
   const channelRef = useRef<any>(null);
   
@@ -76,10 +78,12 @@ export function useBattleSync({
   const onRoundEndRef = useRef(onRoundEnd);
   const onMatchEndRef = useRef(onMatchEnd);
   const onRematchVoteRef = useRef(onRematchVote);
+  const onRoomAbortRef = useRef(onRoomAbort);
   useEffect(() => { onOpponentHitRef.current = onOpponentHit; }, [onOpponentHit]);
   useEffect(() => { onRoundEndRef.current = onRoundEnd; }, [onRoundEnd]);
   useEffect(() => { onMatchEndRef.current = onMatchEnd; }, [onMatchEnd]);
   useEffect(() => { onRematchVoteRef.current = onRematchVote; }, [onRematchVote]);
+  useEffect(() => { onRoomAbortRef.current = onRoomAbort; }, [onRoomAbort]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -132,6 +136,9 @@ export function useBattleSync({
         break;
       case 'rematch_vote':
         onRematchVoteRef.current?.(msg.payload.wantsRematch, msg.sender_id);
+        break;
+      case 'room_abort':
+        onRoomAbortRef.current?.();
         break;
     }
   };
@@ -225,6 +232,15 @@ export function useBattleSync({
     });
   }, [myUserId]);
 
+  // Lawan (atau kita) memutuskan keluar permainan; semua pemain di room diarahkan ke lobby
+  const broadcastRoomAbort = useCallback(async () => {
+    if (!channelRef.current) return;
+    await channelRef.current.send({
+      type: 'broadcast', event: 'game',
+      payload: { type: 'room_abort', payload: {}, sender_id: myUserId, timestamp: Date.now() },
+    });
+  }, [myUserId]);
+
   const interpolateOpponent = useCallback((alpha: number) => {
     const target = interpolatedOpponentRef.current;
     const current = opponentStateRef.current;
@@ -253,6 +269,7 @@ export function useBattleSync({
     broadcastRoundEnd,
     broadcastMatchEnd,
     broadcastRematchVote,
+    broadcastRoomAbort,
     interpolateOpponent,
   };
 }

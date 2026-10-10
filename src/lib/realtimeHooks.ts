@@ -17,7 +17,7 @@ export interface PlayerPresence {
  * Tipe data broadcast untuk game state
  */
 export interface GameBroadcast {
-  type: 'position' | 'action' | 'hit' | 'round_start' | 'round_end' | 'match_end';
+  type: 'position' | 'action' | 'hit' | 'round_start' | 'round_end' | 'match_end' | 'wins_needed_update';
   payload: any;
   sender_id: string;
   timestamp: number;

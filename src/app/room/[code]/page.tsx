@@ -47,11 +47,12 @@ export default function RoomPage() {
     }
   }, [players, userId]);
 
-  const handleStartGame = () => {
+  const handleStartGame = (_isHost?: boolean, _opponent?: string, winsNeeded?: number) => {
     const playerNum = isHost ? '1' : '2';
     const opponent = Array.from(players.values()).find(p => p.user_id !== userId);
     const opponentName = opponent?.name || '';
-    router.push(`/?game=1&room=${roomCode}&name=${encodeURIComponent(playerName)}&player=${playerNum}&opponent=${encodeURIComponent(opponentName)}`);
+    const wins = typeof winsNeeded === 'number' ? winsNeeded : 2;
+    router.push(`/?game=1&room=${roomCode}&name=${encodeURIComponent(playerName)}&player=${playerNum}&opponent=${encodeURIComponent(opponentName)}&wins=${wins}`);
   };
 
   const handleLeaveRoom = () => {

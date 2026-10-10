@@ -60,6 +60,7 @@ export default function Home() {
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [isPlayer1, setIsPlayer1] = useState(true);
   const [opponentName, setOpponentName] = useState('');
+  const [winsNeeded, setWinsNeeded] = useState(2);
 
   const userId = getOrCreateUserId();
 
@@ -71,17 +72,17 @@ export default function Home() {
     const name = params.get('name');
     const player = params.get('player'); // '1' or '2'
     const opponent = params.get('opponent'); // nama lawan
-    
+    const wins = params.get('wins'); // jumlah ronde menang yang dibutuhkan
+
     if (gameMode === '1' && room && name) {
       setRoomCode(room.toUpperCase());
       setPlayerName(name);
       setIsMultiplayer(true);
       setIsPlayer1(player === '1');
       if (opponent) setOpponentName(opponent);
+      const winsNum = wins ? parseInt(wins, 10) : 2;
+      if (winsNum === 1 || winsNum === 2 || winsNum === 3) setWinsNeeded(winsNum);
       setPhase('multiplayer');
-      
-      // Get opponent name from presence or wait
-      // For now, we'll set it when game starts
     }
   }, []);
 
@@ -94,7 +95,10 @@ export default function Home() {
 
   // Dipanggil dari RoomLobby saat countdown selesai.
   // isHost/opponentName hanya ada bila masuk lewat jalur room (lobby).
-  const handleStartGame = (isHost?: boolean, opponent?: string) => {
+  const handleStartGame = (isHost?: boolean, opponent?: string, winsNeededParam?: number) => {
+    if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2 || winsNeededParam === 3)) {
+      setWinsNeeded(winsNeededParam);
+    }
     if (isMultiplayer) {
       setPhase('multiplayer');
     } else if (isHost !== undefined) {
@@ -102,6 +106,9 @@ export default function Home() {
       setIsMultiplayer(true);
       setIsPlayer1(isHost);
       if (opponent) setOpponentName(opponent);
+      if (winsNeededParam !== undefined && (winsNeededParam === 1 || winsNeededParam === 2 || winsNeededParam === 3)) {
+        setWinsNeeded(winsNeededParam);
+      }
       setPhase('multiplayer');
     } else {
       setPhase('game');
@@ -143,6 +150,7 @@ export default function Home() {
         myName={playerName}
         opponentName={opponentName || 'Lawan'}
         isPlayer1={isPlayer1}
+        winsNeeded={winsNeeded}
         onMatchEnd={handleMatchEnd}
       />
     );

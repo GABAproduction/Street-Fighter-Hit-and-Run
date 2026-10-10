@@ -9,7 +9,7 @@ interface RoomLobbyProps {
   roomCode: string;
   playerName: string;
   // isPlayer1: pemain yang join duluan (host) = true; opponentName: nama lawan
-  onStartGame: (isPlayer1?: boolean, opponentName?: string) => void;
+  onStartGame: (isPlayer1?: boolean, opponentName?: string, winsNeeded?: number) => void;
   onLeaveRoom: () => void;
 }
 
@@ -24,6 +24,8 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
   const [countdown, setCountdown] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [roomCreated, setRoomCreated] = useState(false);
+  // Kemenangan ronde yang dibutuhkan untuk menang (1 = 1 ronde, 2 = Best of 3, 3 = Best of 5)
+  const [winsNeeded, setWinsNeeded] = useState<number>(2);
 
   // Determine host (first player to join)
   useEffect(() => {
@@ -58,6 +60,9 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
         .upsert({
           kode_room: roomCode.toUpperCase(),
           status: 'waiting',
+          host_name: playerName,
+          player_count: playerCount,
+          wins_needed: winsNeeded,
         }, { onConflict: 'kode_room' });
       if (!error) setRoomCreated(true);
     } catch (e) {
@@ -70,15 +75,52 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
     try {
       await (supabase as any)
         .from('rooms')
-        .update({ status })
+        .update({ status, player_count: playerCount, wins_needed: winsNeeded })
         .eq('kode_room', roomCode.toUpperCase());
     } catch (e) {
       console.error('Failed to update room status:', e);
     }
   };
 
+  // Sinkron wins_needed ke DB saat host mengubah (agd muncul di daftar room + untuk tamu)
+  useEffect(() => {
+    if (!isHost || !roomCreated) return;
+    (supabase as any)
+      .from('rooms')
+      .update({ wins_needed: winsNeeded, player_count: playerCount })
+      .eq('kode_room', roomCode.toUpperCase())
+      .then(() => {});
+    // Broadcast ke lawan agar mendapat update instan (tanpa perlu polling DB)
+    send('wins_needed_update', { winsNeeded });
+  }, [winsNeeded, playerCount, isHost, roomCreated, roomCode, send]);
+
+  // Terima broadcast wins_needed dari host
+  useEffect(() => {
+    const cleanup = on('wins_needed_update', (data: any) => {
+      if (data && typeof data.winsNeeded === 'number') {
+        setWinsNeeded(data.winsNeeded);
+      }
+    });
+    return cleanup;
+  }, [on]);
+
+  // Tamu: baca wins_needed dari DB (fallback jika broadcast terlewat)
+  useEffect(() => {
+    if (isHost || !roomCode) return;
+    (supabase as any)
+      .from('rooms')
+      .select('wins_needed')
+      .eq('kode_room', roomCode.toUpperCase())
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (data && typeof data.wins_needed === 'number') setWinsNeeded(data.wins_needed);
+      });
+  }, [isHost, roomCode]);
+
   // Countdown lalu pindah ke game. Dipanggil di host (lokal) dan di lawan (dari broadcast).
-  const beginCountdown = useCallback(() => {
+  const beginCountdown = useCallback((wins?: number) => {
+    const finalWins = typeof wins === 'number' ? wins : winsNeeded;
+    setWinsNeeded(finalWins);
     setCountdown(3);
     updateRoomStatus('playing');
     const timer = setInterval(() => {
@@ -87,14 +129,14 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
     setTimeout(() => {
       clearInterval(timer);
       setCountdown(null);
-      onStartGame(isHost, opponent?.name);
+      onStartGame(isHost, opponent?.name, finalWins);
     }, 3500);
-  }, [onStartGame, isHost, opponent]);
+  }, [onStartGame, isHost, opponent, winsNeeded]);
 
   // Listen for round_start from host (hanya lawan; host tidak menerima pesan sendiri)
   useEffect(() => {
-    const cleanup = on('round_start', () => {
-      beginCountdown();
+    const cleanup = on('round_start', (payload: any) => {
+      beginCountdown(payload?.winsNeeded);
     });
     return cleanup;
   }, [on, beginCountdown]);
@@ -119,7 +161,7 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
     if (playerCount !== 2) { setError('Butuh 2 pemain untuk mulai'); return; }
     if (!allReady) { setError('Tunggu lawan ready'); return; }
     
-    await send('round_start', {});
+    await send('round_start', { winsNeeded });
     // Host tidak menerima broadcast sendiri, jadi jalankan countdown di sini juga
     beginCountdown();
   };
@@ -190,6 +232,32 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
           </div>
         </div>
 
+        {isHost && (
+          <div className="border-t border-gray-700 pt-4">
+            <p className="text-sm text-gray-300 mb-2">Format pertarungan</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: 1, label: '1 Ronde' },
+                { value: 2, label: 'Best of 3' },
+                { value: 3, label: 'Best of 5' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setWinsNeeded(opt.value)}
+                  disabled={countdown !== null}
+                  className={`py-2 rounded-lg border text-sm font-bold transition-colors ${
+                    winsNeeded === opt.value
+                      ? 'bg-yellow-600 border-yellow-500 text-black'
+                      : 'bg-gray-700 border-gray-600 text-gray-300 hover:border-gray-500'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="border-t border-gray-700 pt-4">
           {isHost ? (
             <button onClick={handleStartGame} disabled={playerCount !== 2 || !allReady || countdown !== null} className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold py-4 rounded-lg transition-colors text-lg">
@@ -206,7 +274,7 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
 
         <div className="text-xs text-gray-500 text-center space-y-1">
           <p>Kontrol: ← → Jalan | Shift Dash | Spasi/X/Z Pukul</p>
-          <p>Best of 3 ronde. HP 100. Arena menyempit setelah 45 detik.</p>
+          <p>{winsNeeded === 1 ? '1 ronde' : winsNeeded === 2 ? 'Best of 3' : 'Best of 5'}. HP 100. Arena menyempit setelah 45 detik.</p>
         </div>
       </div>
 

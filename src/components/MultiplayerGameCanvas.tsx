@@ -26,6 +26,7 @@ interface MultiplayerGameCanvasProps {
   myName: string;
   opponentName: string;
   isPlayer1: boolean;
+  winsNeeded?: number;
   onMatchEnd: (winner: 'player' | 'opponent') => void;
 }
 
@@ -35,6 +36,7 @@ export default function MultiplayerGameCanvas({
   myName,
   opponentName,
   isPlayer1,
+  winsNeeded = 2,
   onMatchEnd,
 }: MultiplayerGameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,6 +67,9 @@ export default function MultiplayerGameCanvas({
   const matchSavedRef = useRef(false);
   const winsRef = useRef({ my: 0, opp: 0 });
   const roundRef = useRef(1);
+  const handleBackToLobbyRef = useRef<(() => void) | null>(null);
+  const broadcastRoomAbortRef = useRef<(() => void) | null>(null);
+  const disconnectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [myHp, setMyHp] = useState<number>(GAME_CONFIG.hp.max);
   const [opponentHp, setOpponentHp] = useState<number>(GAME_CONFIG.hp.max);
@@ -80,6 +85,8 @@ export default function MultiplayerGameCanvas({
   const [opponentWantsRematch, setOpponentWantsRematch] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(true);
   const [connectionWarning, setConnectionWarning] = useState('');
+  // Hitung mundur saat lawan terputus; setelah 30 detik muncul tombol keluar
+  const [disconnectCountdown, setDisconnectCountdown] = useState<number>(0);
 
   useEffect(() => { winsRef.current = { my: myWins, opp: opponentWins }; }, [myWins, opponentWins]);
   useEffect(() => { roundRef.current = round; }, [round]);
@@ -197,9 +204,9 @@ export default function MultiplayerGameCanvas({
     if (isMeWinner) setMyWins(nextMy); else setOpponentWins(nextOpp);
     winsRef.current = { my: nextMy, opp: nextOpp };
 
-    const matchFinished = nextMy >= 2 || nextOpp >= 2;
+    const matchFinished = nextMy >= winsNeeded || nextOpp >= winsNeeded;
     if (matchFinished) {
-      const meWon = nextMy >= 2;
+      const meWon = nextMy >= winsNeeded;
       const finalWinner: 'player' | 'opponent' = meWon ? 'player' : 'opponent';
       setGameOver(true);
       setWinner(finalWinner);
@@ -219,7 +226,7 @@ export default function MultiplayerGameCanvas({
       myPlayerRef.current.hp = GAME_CONFIG.hp.max;
       opponentRef.current.hp = GAME_CONFIG.hp.max;
     }
-  }, [gameOver, myName, opponentName, playRoundEnd, onMatchEnd, doSaveMatch, isPlayer1]);
+  }, [gameOver, myName, opponentName, playRoundEnd, onMatchEnd, doSaveMatch, isPlayer1, winsNeeded]);
 
   // ---------- back to lobby ----------
   const handleBackToLobby = useCallback(() => {
@@ -227,9 +234,43 @@ export default function MultiplayerGameCanvas({
     window.location.href = '/';
   }, []);
 
+  handleBackToLobbyRef.current = handleBackToLobby;
+
+  // ---------- lawan terputus: hitung mundur lalu tawarkan keluar ----------
+  const clearDisconnectTimer = useCallback(() => {
+    if (disconnectTimerRef.current) {
+      clearInterval(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+  }, []);
+
   const handleOpponentPresenceChange = useCallback((present: boolean) => {
     setOpponentConnected(present);
-    setConnectionWarning(present ? '' : 'Lawan terputus — menunggu reconnect...');
+    if (present) {
+      setConnectionWarning('');
+      setDisconnectCountdown(0);
+      clearDisconnectTimer();
+      return;
+    }
+    // mulai hitung mundur 30 detik
+    if (disconnectTimerRef.current) return;
+    setConnectionWarning('Lawan terputus — menunggu reconnect...');
+    let remaining = 30;
+    setDisconnectCountdown(remaining);
+    disconnectTimerRef.current = setInterval(() => {
+      remaining -= 1;
+      setDisconnectCountdown(remaining);
+      if (remaining <= 0) {
+        clearDisconnectTimer();
+        setConnectionWarning('Lawan terputus lebih dari 30 detik. Keluar sekarang agar tidak terjebak.');
+      }
+    }, 1000);
+  }, [clearDisconnectTimer]);
+
+  // ---------- keluar permainan (tombol KELUAR) ----------
+  const handleAbort = useCallback(async () => {
+    try { await broadcastRoomAbortRef.current?.(); } catch {}
+    handleBackToLobbyRef.current?.();
   }, []);
 
   const handleOpponentHit = useCallback((damage: number, hitX: number, hitY: number, isMomentum: boolean) => {
@@ -281,6 +322,7 @@ export default function MultiplayerGameCanvas({
     broadcastRoundEnd,
     broadcastMatchEnd,
     broadcastRematchVote,
+    broadcastRoomAbort,
     interpolateOpponent,
   } = useBattleSync({
     roomCode,
@@ -291,11 +333,13 @@ export default function MultiplayerGameCanvas({
     onRoundEnd: handleRoundEnd,
     onMatchEnd: handleMatchEnd,
     onOpponentPresenceChange: handleOpponentPresenceChange,
+    onRoomAbort: () => handleBackToLobbyRef.current?.(),
   });
 
   // keep refs after hook (for callbacks that need them before hook)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   (broadcastMatchEndRef as any).current = broadcastMatchEnd;
+  broadcastRoomAbortRef.current = broadcastRoomAbort;
 
   // ---------- input ----------
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -508,12 +552,12 @@ export default function MultiplayerGameCanvas({
     }
 
     ctx.fillStyle = '#fff'; ctx.font = '16px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(`RONDE ${round} / 3`, arena.width / 2, 55);
+    ctx.fillText(`RONDE ${round} / ${winsNeeded * 2 - 1}`, arena.width / 2, 55);
     ctx.fillText(`${myName}: ${myWins}  -  ${opponentName}: ${opponentWins}`, arena.width / 2, 75); ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = '12px monospace';
     ctx.fillText('← → Jalan | Shift Dash | Spasi/X/Z Pukul', 20, arena.height - 20);
     ctx.restore();
-  }, [walls, round, myWins, opponentWins, myName, opponentName]);
+  }, [walls, round, myWins, opponentWins, myName, opponentName, winsNeeded]);
 
   const drawCharacter = useCallback((
     ctx: CanvasRenderingContext2D,
@@ -581,8 +625,9 @@ export default function MultiplayerGameCanvas({
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       if (musicRef.current) { musicRef.current.stop(); musicRef.current = null; }
       if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
+      clearDisconnectTimer();
     };
-  }, [handleKeyDown, handleKeyUp, gameLoop]);
+  }, [handleKeyDown, handleKeyUp, gameLoop, clearDisconnectTimer]);
 
   if (gameOver) {
     return (
@@ -598,8 +643,11 @@ export default function MultiplayerGameCanvas({
           <p style={{ fontSize: '14px', color: '#888', marginBottom: '12px' }}>Skor: {myWins} - {opponentWins} — Room {roomCode}</p>
           <p style={{ fontSize: '12px', color: matchSaved ? '#22c55e' : '#f59e0b', marginBottom: '16px' }}>{matchSaved ? '✓ Hasil tersimpan ke DB' : isPlayer1 ? 'Menyimpan hasil...' : 'Hasil disimpan oleh host'}</p>
           {connectionWarning && <p style={{ fontSize: '12px', color: '#f87171', marginBottom: 12 }}>{connectionWarning}</p>}
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button onClick={handleBackToLobby} style={{ padding: '14px 28px', fontSize: '16px', fontFamily: 'monospace', background: '#374151', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>KEMBALI KE LOBBY</button>
+            {!opponentConnected && disconnectCountdown <= 0 && (
+              <button onClick={handleAbort} style={{ padding: '14px 28px', fontSize: '16px', fontFamily: 'monospace', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>KELUAR</button>
+            )}
           </div>
           <p style={{ fontSize: '12px', color: '#6b7280', marginTop: 12 }}>
             {opponentName}: {opponentConnected ? 'terhubung' : 'terputus'}
@@ -611,17 +659,19 @@ export default function MultiplayerGameCanvas({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-      <div style={{ width: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '12px', color: opponentConnected ? '#22c55e' : '#f87171' }}>
-        <span>● {opponentConnected ? 'Terhubung' : 'Terputus'}</span>
+      <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '12px', color: opponentConnected ? '#22c55e' : '#f87171' }}>
+        <span>● {opponentConnected ? 'Terhubung' : `Terputus${disconnectCountdown > 0 ? ` — ${disconnectCountdown}s` : ''}`}</span>
         <span>Room {roomCode} — {isPlayer1 ? 'P1' : 'P2'}</span>
       </div>
-      {connectionWarning && <div style={{ width: GAME_CONFIG.arena.width, background: '#7f1d1d', color: '#fecaca', fontFamily: 'monospace', fontSize: '12px', padding: '6px 10px', borderRadius: 6, textAlign: 'center' }}>{connectionWarning}</div>}
-      <canvas ref={canvasRef} style={{ border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
-      <div style={{ width: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '14px', color: '#fff' }}>
+      {connectionWarning && <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, background: '#7f1d1d', color: '#fecaca', fontFamily: 'monospace', fontSize: '12px', padding: '6px 10px', borderRadius: 6, textAlign: 'center' }}>{connectionWarning}{!opponentConnected && disconnectCountdown <= 0 && (
+        <button onClick={handleAbort} style={{ display: 'block', margin: '8px auto 0', padding: '8px 20px', fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>KELUAR</button>
+      )}</div>}
+      <canvas ref={canvasRef} style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, height: 'auto', aspectRatio: `${GAME_CONFIG.arena.width} / ${GAME_CONFIG.arena.height}`, border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
+      <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace', fontSize: '14px', color: '#fff' }}>
         <div><div>HP: {myHp} / {GAME_CONFIG.hp.max}</div><div>Stamina: {myStamina} / {GAME_CONFIG.stamina.max}</div></div>
         <div style={{ textAlign: 'right' }}><div>{opponentName} HP: {opponentHp} / {GAME_CONFIG.hp.max}</div></div>
       </div>
-      <div style={{ width: GAME_CONFIG.arena.width, fontFamily: 'monospace', fontSize: '12px', color: '#888', textAlign: 'center' }}>Kontrol: ← → Jalan | Shift Dash | Spasi/X/Z Pukul</div>
+      <div style={{ width: '100%', maxWidth: GAME_CONFIG.arena.width, fontFamily: 'monospace', fontSize: '12px', color: '#888', textAlign: 'center' }}>Kontrol: ← → Jalan | Shift Dash | Spasi/X/Z Pukul</div>
     </div>
   );
 }
