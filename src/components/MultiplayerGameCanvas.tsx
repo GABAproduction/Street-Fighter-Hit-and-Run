@@ -304,9 +304,8 @@ export default function MultiplayerGameCanvas({
   }, [playPunch, playHit]);
 
   const handleMatchEnd = useCallback((matchWinner: 'player' | 'target') => {
-    // Penjaga ganda: pemenang match sudah menentukan skor sendiri di applyRoundWin.
-    // Jalur ini hanya menampilkan layar akhir agar tidak menambah skor ekstra.
-    if (gameOverRef.current) return;
+    // Skor final sudah dihitung applyRoundWin di masing-masing klien —
+    // callback ini hanya menampilkan layar akhir (tanpa mengubah skor/menyimpan).
     const isMeWinner = matchWinner === 'target';
     setGameOver(true);
     setWinner(isMeWinner ? 'player' : 'opponent');
