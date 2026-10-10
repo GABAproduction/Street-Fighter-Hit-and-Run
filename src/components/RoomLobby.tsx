@@ -8,7 +8,8 @@ import { supabase } from '@/lib/supabaseClient';
 interface RoomLobbyProps {
   roomCode: string;
   playerName: string;
-  onStartGame: () => void;
+  // isPlayer1: pemain yang join duluan (host) = true; opponentName: nama lawan
+  onStartGame: (isPlayer1?: boolean, opponentName?: string) => void;
   onLeaveRoom: () => void;
 }
 
@@ -76,22 +77,27 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
     }
   };
 
-  // Listen for round_start from host
+  // Countdown lalu pindah ke game. Dipanggil di host (lokal) dan di lawan (dari broadcast).
+  const beginCountdown = useCallback(() => {
+    setCountdown(3);
+    updateRoomStatus('playing');
+    const timer = setInterval(() => {
+      setCountdown(c => c === null ? null : c - 1);
+    }, 1000);
+    setTimeout(() => {
+      clearInterval(timer);
+      setCountdown(null);
+      onStartGame(isHost, opponent?.name);
+    }, 3500);
+  }, [onStartGame, isHost, opponent]);
+
+  // Listen for round_start from host (hanya lawan; host tidak menerima pesan sendiri)
   useEffect(() => {
     const cleanup = on('round_start', () => {
-      setCountdown(3);
-      updateRoomStatus('playing');
-      const timer = setInterval(() => {
-        setCountdown(c => c === null ? null : c - 1);
-      }, 1000);
-      setTimeout(() => {
-        clearInterval(timer);
-        setCountdown(null);
-        onStartGame();
-      }, 3500);
+      beginCountdown();
     });
     return cleanup;
-  }, [on, onStartGame]);
+  }, [on, beginCountdown]);
 
   // Listen for host leaving
   useEffect(() => {
@@ -114,6 +120,8 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
     if (!allReady) { setError('Tunggu lawan ready'); return; }
     
     await send('round_start', {});
+    // Host tidak menerima broadcast sendiri, jadi jalankan countdown di sini juga
+    beginCountdown();
   };
 
   const handleLeave = async () => {
@@ -202,7 +210,7 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
         </div>
       </div>
 
-      <footer className="mt-8 text-center text-gray-500 text-sm"><p>Langkah 3: Sinkronisasi Pertarungan | Room + DB</p></footer>
+      <footer className="mt-8 text-center text-gray-500 text-sm"><p>Street Fighter : Hit and Run</p></footer>
     </div>
   );
 }

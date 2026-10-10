@@ -70,12 +70,14 @@ export default function Home() {
     const room = params.get('room');
     const name = params.get('name');
     const player = params.get('player'); // '1' or '2'
+    const opponent = params.get('opponent'); // nama lawan
     
     if (gameMode === '1' && room && name) {
       setRoomCode(room.toUpperCase());
       setPlayerName(name);
       setIsMultiplayer(true);
       setIsPlayer1(player === '1');
+      if (opponent) setOpponentName(opponent);
       setPhase('multiplayer');
       
       // Get opponent name from presence or wait
@@ -90,8 +92,16 @@ export default function Home() {
     setPhase('room');
   };
 
-  const handleStartGame = () => {
+  // Dipanggil dari RoomLobby saat countdown selesai.
+  // isHost/opponentName hanya ada bila masuk lewat jalur room (lobby).
+  const handleStartGame = (isHost?: boolean, opponent?: string) => {
     if (isMultiplayer) {
+      setPhase('multiplayer');
+    } else if (isHost !== undefined) {
+      // jalur room: ini sesi multiplayer, flag host + nama lawan dari presence
+      setIsMultiplayer(true);
+      setIsPlayer1(isHost);
+      if (opponent) setOpponentName(opponent);
       setPhase('multiplayer');
     } else {
       setPhase('game');
@@ -150,7 +160,7 @@ export default function Home() {
       </header>
       <GameCanvas onRoundEnd={handleMatchEnd} />
       <footer className="mt-6 text-center text-gray-500 text-sm">
-        <p>Langkah 1: Game Lokal</p>
+        <p>Game Lokal</p>
       </footer>
     </div>
   );

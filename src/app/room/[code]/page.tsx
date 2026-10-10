@@ -49,7 +49,9 @@ export default function RoomPage() {
 
   const handleStartGame = () => {
     const playerNum = isHost ? '1' : '2';
-    router.push(`/?game=1&room=${roomCode}&name=${encodeURIComponent(playerName)}&player=${playerNum}`);
+    const opponent = Array.from(players.values()).find(p => p.user_id !== userId);
+    const opponentName = opponent?.name || '';
+    router.push(`/?game=1&room=${roomCode}&name=${encodeURIComponent(playerName)}&player=${playerNum}&opponent=${encodeURIComponent(opponentName)}`);
   };
 
   const handleLeaveRoom = () => {

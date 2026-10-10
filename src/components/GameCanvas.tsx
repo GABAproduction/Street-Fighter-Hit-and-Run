@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createMusic } from '@/lib/gameMusic';
 import { GAME_CONFIG } from '@/lib/gameConfig';
 import {
   createPlayer,
@@ -31,6 +32,7 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
   
   // Audio context untuk sound effects
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const musicRef = useRef<ReturnType<typeof createMusic> | null>(null);
   
   // Game state (pakai ref agar tidak trigger re-render React)
   const playerRef = useRef<Entity>(createPlayer(200, 1));
@@ -666,6 +668,11 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
     canvas.width = GAME_CONFIG.arena.width;
     canvas.height = GAME_CONFIG.arena.height;
     
+    // Music
+    musicRef.current = createMusic();
+    musicRef.current.setVolume(0.08);
+    musicRef.current.start();
+
     // Event listeners
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -685,6 +692,8 @@ export default function GameCanvas({ onRoundEnd }: GameCanvasProps) {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      // Stop music
+      musicRef.current?.stop();
       // Close audio context on unmount
       if (audioCtxRef.current) {
         audioCtxRef.current.close();

@@ -192,9 +192,7 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
         </div>
       </div>
 
-      <footer className="mt-12 text-center text-gray-500 text-sm">
-        <p>Langkah 2: Lobi & Room | Dev 1</p>
-      </footer>
+      <footer className="mt-12 text-center text-gray-500 text-sm"><p>Street Fighter : Hit and Run</p></footer>
     </div>
   );
 }

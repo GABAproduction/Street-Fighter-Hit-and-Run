@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createMusic } from '@/lib/gameMusic';
 import { GAME_CONFIG } from '@/lib/gameConfig';
 import {
   createPlayer,
@@ -42,6 +43,7 @@ export default function MultiplayerGameCanvas({
   const elapsedMsRef = useRef<number>(0);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const musicRef = useRef<ReturnType<typeof createMusic> | null>(null);
 
   const myPlayerRef = useRef<Entity>(createPlayer(isPlayer1 ? 200 : 760, isPlayer1 ? 1 : -1));
   const opponentRef = useRef<Entity>(createTarget(isPlayer1 ? 760 : 200));
@@ -219,48 +221,11 @@ export default function MultiplayerGameCanvas({
     }
   }, [gameOver, myName, opponentName, playRoundEnd, onMatchEnd, doSaveMatch, isPlayer1]);
 
-  // ---------- rematch ----------
-  const resetForRematch = useCallback(() => {
-    roundScoresRef.current = [];
-    matchSavedRef.current = false;
-    startTimeRef.current = new Date().toISOString();
-    winsRef.current = { my: 0, opp: 0 };
-    roundRef.current = 1;
-    setRound(1);
-    setMyWins(0);
-    setOpponentWins(0);
-    setGameOver(false);
-    setWinner(null);
-    setMatchSaved(false);
-    setMyWantsRematch(false);
-    setOpponentWantsRematch(false);
-    elapsedMsRef.current = 0;
-    lastTimeRef.current = 0;
-    hitPauseRef.current = 0;
-    particlesRef.current = [];
-    dashTrailRef.current = [];
-    screenShakeRef.current = { x: 0, y: 0, timer: 0 };
-    matchOverRef.current = false;
-    awaitingConfirmRef.current = false;
-    resetRound(myPlayerRef.current, opponentRef.current, isPlayer1 ? 200 : 760, isPlayer1 ? 760 : 200);
-    myPlayerRef.current.hp = GAME_CONFIG.hp.max;
-    opponentRef.current.hp = GAME_CONFIG.hp.max;
-    animationRef.current = requestAnimationFrame(gameLoop);
-  }, [isPlayer1]);
-
-  const broadcastRematchVoteRef = useRef<((wants: boolean) => void) | null>(null);
-  const handleRematchRequest = useCallback(() => {
-    const next = !myWantsRematch;
-    setMyWantsRematch(next);
-    broadcastRematchVoteRef.current?.(next);
-    if (next && opponentWantsRematch) setTimeout(() => resetForRematch(), 300);
-  }, [myWantsRematch, opponentWantsRematch, resetForRematch]);
-
-  const handleRematchVote = useCallback((wantsRematch: boolean, fromUserId: string) => {
-    if (fromUserId === myUserId) return;
-    setOpponentWantsRematch(wantsRematch);
-    if (wantsRematch && myWantsRematch) setTimeout(() => resetForRematch(), 300);
-  }, [myUserId, myWantsRematch, resetForRematch]);
+  // ---------- back to lobby ----------
+  const handleBackToLobby = useCallback(() => {
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    window.location.href = '/';
+  }, []);
 
   const handleOpponentPresenceChange = useCallback((present: boolean) => {
     setOpponentConnected(present);
@@ -325,14 +290,12 @@ export default function MultiplayerGameCanvas({
     onOpponentHit: handleOpponentHit,
     onRoundEnd: handleRoundEnd,
     onMatchEnd: handleMatchEnd,
-    onRematchVote: handleRematchVote,
     onOpponentPresenceChange: handleOpponentPresenceChange,
   });
 
   // keep refs after hook (for callbacks that need them before hook)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   (broadcastMatchEndRef as any).current = broadcastMatchEnd;
-  (broadcastRematchVoteRef as any).current = broadcastRematchVote;
 
   // ---------- input ----------
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -604,6 +567,9 @@ export default function MultiplayerGameCanvas({
     if (!canvas) return;
     canvas.width = GAME_CONFIG.arena.width;
     canvas.height = GAME_CONFIG.arena.height;
+    musicRef.current = createMusic();
+    musicRef.current.setVolume(0.08);
+    musicRef.current.start();
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     lastTimeRef.current = 0; elapsedMsRef.current = 0; hitPauseRef.current = 0;
@@ -613,12 +579,12 @@ export default function MultiplayerGameCanvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (musicRef.current) { musicRef.current.stop(); musicRef.current = null; }
       if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
     };
   }, [handleKeyDown, handleKeyUp, gameLoop]);
 
   if (gameOver) {
-    const bothWant = myWantsRematch && opponentWantsRematch;
     return (
       <div style={{ position: 'relative' }}>
         <canvas ref={canvasRef} style={{ border: '2px solid #333', borderRadius: '8px', display: 'block' }} />
@@ -632,16 +598,12 @@ export default function MultiplayerGameCanvas({
           <p style={{ fontSize: '14px', color: '#888', marginBottom: '12px' }}>Skor: {myWins} - {opponentWins} — Room {roomCode}</p>
           <p style={{ fontSize: '12px', color: matchSaved ? '#22c55e' : '#f59e0b', marginBottom: '16px' }}>{matchSaved ? '✓ Hasil tersimpan ke DB' : isPlayer1 ? 'Menyimpan hasil...' : 'Hasil disimpan oleh host'}</p>
           {connectionWarning && <p style={{ fontSize: '12px', color: '#f87171', marginBottom: 12 }}>{connectionWarning}</p>}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={handleRematchRequest} style={{ padding: '14px 28px', fontSize: '16px', fontFamily: 'monospace', background: myWantsRematch ? '#22c55e' : '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-              {myWantsRematch ? '✓ Menunggu lawan...' : 'REMATCH'}
-            </button>
-            <button onClick={() => { window.location.href = '/'; }} style={{ padding: '14px 28px', fontSize: '16px', fontFamily: 'monospace', background: '#374151', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>KELUAR</button>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={handleBackToLobby} style={{ padding: '14px 28px', fontSize: '16px', fontFamily: 'monospace', background: '#374151', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>KEMBALI KE LOBBY</button>
           </div>
           <p style={{ fontSize: '12px', color: '#6b7280', marginTop: 12 }}>
-            {opponentWantsRematch ? `${opponentName} ingin rematch` : `${opponentName}: ${opponentConnected ? 'terhubung' : 'terputus'}`} {bothWant ? '— memulai ulang...' : ''}
+            {opponentName}: {opponentConnected ? 'terhubung' : 'terputus'}
           </p>
-          <p style={{ fontSize: '11px', color: '#4b5563', marginTop: 8 }}>Rematch butuh persetujuan kedua pemain.</p>
         </div>
       </div>
     );
