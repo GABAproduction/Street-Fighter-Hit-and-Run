@@ -521,7 +521,8 @@ export function resetRound(player: Entity, target: Entity, playerX: number, targ
   player.y = GAME_CONFIG.arena.floorY;
   player.hp = GAME_CONFIG.hp.max;
   player.stamina = GAME_CONFIG.stamina.max;
-  player.facing = 1;
+  // Hadap ke lawan: pemain di kiri → kanan (1), di kanan → kiri (-1)
+  player.facing = playerX < targetX ? 1 : -1;
   player.isMoving = false;
   player.isDashing = false;
   player.dashTimer = 0;
@@ -541,7 +542,8 @@ export function resetRound(player: Entity, target: Entity, playerX: number, targ
   target.x = targetX;
   target.y = GAME_CONFIG.arena.floorY;
   target.hp = GAME_CONFIG.target.maxHp;
-  target.facing = -1;
+  // Target selalu menghadap pemain
+  target.facing = targetX < playerX ? 1 : -1;
   target.hitFlashTimer = 0;
   target.screenShakeTimer = 0;
 }

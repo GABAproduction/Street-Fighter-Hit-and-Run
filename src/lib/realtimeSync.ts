@@ -33,7 +33,7 @@ interface UseBattleSyncProps {
   myPlayer: Entity;
   opponentPlayer: Entity;
   onOpponentHit: (damage: number, hitX: number, hitY: number, isMomentum: boolean) => void;
-  onRoundEnd: (winner: 'player' | 'target') => void;
+  onRoundEnd: (winner: 'player' | 'target', round: number) => void;
   onMatchEnd: (winner: 'player' | 'target') => void;
   onRematchVote?: (wantsRematch: boolean, fromUserId: string) => void;
   onOpponentPresenceChange?: (present: boolean) => void;
@@ -161,7 +161,7 @@ export function useBattleSync({
       case 'round_start':
         break;
       case 'round_end':
-        onRoundEndRef.current(msg.payload.winner);
+        onRoundEndRef.current(msg.payload.winner, msg.payload.round);
         break;
       case 'match_end':
         onMatchEndRef.current(msg.payload.winner);
@@ -251,11 +251,11 @@ export function useBattleSync({
     });
   }, [myUserId]);
 
-  const broadcastRoundEnd = useCallback((winner: 'player' | 'target') => {
+  const broadcastRoundEnd = useCallback((winner: 'player' | 'target', round: number) => {
     if (!channelRef.current) return;
     channelRef.current.send({
       type: 'broadcast', event: 'game',
-      payload: { type: 'round_end', payload: { winner }, sender_id: myUserId, timestamp: Date.now() },
+      payload: { type: 'round_end', payload: { winner, round }, sender_id: myUserId, timestamp: Date.now() },
     });
   }, [myUserId]);
 

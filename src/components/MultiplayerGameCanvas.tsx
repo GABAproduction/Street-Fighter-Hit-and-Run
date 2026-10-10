@@ -304,26 +304,24 @@ export default function MultiplayerGameCanvas({
   }, [playPunch, playHit]);
 
   const handleMatchEnd = useCallback((matchWinner: 'player' | 'target') => {
+    // Penjaga ganda: pemenang match sudah menentukan skor sendiri di applyRoundWin.
+    // Jalur ini hanya menampilkan layar akhir agar tidak menambah skor ekstra.
+    if (gameOverRef.current) return;
     const isMeWinner = matchWinner === 'target';
     setGameOver(true);
     setWinner(isMeWinner ? 'player' : 'opponent');
     onMatchEnd(isMeWinner ? 'player' : 'opponent');
     playRoundEnd(isMeWinner);
-    const meWon = isMeWinner;
-    const finalMy = winsRef.current.my + (meWon ? 1 : 0);
-    const finalOpp = winsRef.current.opp + (meWon ? 0 : 1);
-    if (!matchSavedRef.current && isPlayer1) {
-      roundScoresRef.current.push({ ronde: roundScoresRef.current.length + 1, pemenang: meWon ? myName : opponentName });
-      doSaveMatch(finalMy, finalOpp, meWon ? myName : opponentName);
-    }
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-  }, [onMatchEnd, playRoundEnd, isPlayer1, myName, opponentName, doSaveMatch]);
+  }, [onMatchEnd, playRoundEnd]);
 
   const broadcastMatchEndRef = useRef<((winner: 'player' | 'target') => void) | null>(null);
 
   // remote round_end: sender's 'player' means sender won → for us it's a loss (invert)
-  const handleRoundEnd = useCallback((roundWinner: 'player' | 'target') => {
+  const handleRoundEnd = useCallback((roundWinner: 'player' | 'target', round: number) => {
     if (matchOverRef.current && !awaitingConfirmRef.current) return;
+    // Abaikannya ronde yang sudah dihitung sebelumnya
+    if (roundScoresRef.current.length >= round) return;
     const isMeWinner = roundWinner === 'target';
     matchOverRef.current = true;
     awaitingConfirmRef.current = false;
@@ -455,7 +453,7 @@ export default function MultiplayerGameCanvas({
         if (!isMeWinner) {
           matchOverRef.current = true;
           myPlayer.hp = 1; opponent.hp = 1;
-          broadcastRoundEnd('target');
+          broadcastRoundEnd('target', roundRef.current);
           setTimeout(() => applyRoundWin(false), 30);
         } else {
           awaitingConfirmRef.current = true;
