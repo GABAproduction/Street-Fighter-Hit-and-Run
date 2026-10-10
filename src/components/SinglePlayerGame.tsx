@@ -579,30 +579,7 @@ export default function SinglePlayerGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [difficulty, winsNeeded]);
 
-  // ============ RESTART ============
-
-  const handleRestart = useCallback(() => {
-    const player = playerRef.current;
-    const bot = botRef.current;
-    resetRound(player, bot, 200, 760);
-    setRound(1);
-    roundRef.current = 1;
-    roundScoresRef.current = [];
-    winsRef.current = { my: 0, bot: 0 };
-    setPlayerWins(0);
-    setBotWins(0);
-    setGameOver(false);
-    setWinner(null);
-    botStateRef.current = createBotState();
-    elapsedMsRef.current = 0;
-    lastTimeRef.current = 0;
-    hitPauseRef.current = 0;
-    particlesRef.current = [];
-    dashTrailRef.current = [];
-    screenShakeRef.current = { x: 0, y: 0, timer: 0 };
-    matchOverRef.current = false;
-    animationRef.current = requestAnimationFrame(gameLoop);
-  }, [gameLoop]);
+  // ============ MUSIC ============
 
   const toggleMusic = useCallback(() => {
     setMusicOn((prev) => {
@@ -641,22 +618,7 @@ export default function SinglePlayerGame({
           <p style={{ fontSize: '14px', color: '#888', marginBottom: '24px' }}>
             Skor: {playerWins} - {botWins}
           </p>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              onClick={handleRestart}
-              style={{
-                padding: '14px 32px',
-                fontSize: '16px',
-                fontFamily: 'monospace',
-                background: '#3b82f6',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-              }}
-            >
-              MAIN LAGI
-            </button>
+          <div style={{ marginTop: 24 }}>
             {onBackToLobby && (
               <button
                 onClick={onBackToLobby}
@@ -669,6 +631,7 @@ export default function SinglePlayerGame({
                   border: 'none',
                   borderRadius: '8px',
                   cursor: 'pointer',
+                  minWidth: 220,
                 }}
               >
                 KEMBALI KE LOBBY
