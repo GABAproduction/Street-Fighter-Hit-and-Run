@@ -33,6 +33,13 @@ export default function RoomLobby({ roomCode, playerName, onStartGame, onLeaveRo
   }, [players]);
 
   const isHost = hostId === myUserId;
+
+  // Auto-ready for host
+  useEffect(() => {
+    if (isHost && !myReady) {
+      setReady(true);
+    }
+  }, [isHost, myReady, setReady]);
   const allReady = playerCount === 2 && Array.from(players.values()).every(p => p.ready);
   const opponent = Array.from(players.values()).find(p => p.user_id !== myUserId);
 
