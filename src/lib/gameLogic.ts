@@ -138,6 +138,40 @@ export function createTarget(x: number): Entity {
 }
 
 /**
+ * Buat entity bot (single-player).
+ * Mirip createPlayer tapi dengan nama & warna khas bot.
+ */
+export function createBot(x: number, facing: 1 | -1 = -1, name = 'BOT'): Entity {
+  const cfg = GAME_CONFIG.character;
+  return {
+    x,
+    y: GAME_CONFIG.arena.floorY,
+    facing,
+    hp: GAME_CONFIG.hp.max,
+    maxHp: GAME_CONFIG.hp.max,
+    stamina: GAME_CONFIG.stamina.max,
+    maxStamina: GAME_CONFIG.stamina.max,
+    name,
+    isMoving: false,
+    isDashing: false,
+    dashTimer: 0,
+    dashCooldown: 0,
+    dashDirection: 0,
+    isPunching: false,
+    punchTimer: 0,
+    punchCooldown: 0,
+    momentumTimer: 0,
+    closeRangeFrames: 0,
+    staminaRegenDelay: 0,
+    color: '#f97316', // oranye khas bot
+    hitFlashTimer: 0,
+    screenShakeTimer: 0,
+    footstepTimer: 0,
+    lastX: x,
+  };
+}
+
+/**
  * Mendapatkan hurtbox entity (dalam koordinat world)
  */
 export function getHurtbox(e: Entity) {
@@ -510,6 +544,64 @@ export function updateGame(
   }
   
   return { leftWall: walls.left, right: walls.right, hitResult };
+}
+
+/**
+ * Update game logic untuk dua pemain (human vs bot).
+ * Setiap pemain memiliki input sendiri; damage mutual terjadi.
+ */
+export function updateGameTwoPlayer(
+  player: Entity,
+  opponent: Entity,
+  playerInput: PlayerInput,
+  opponentInput: PlayerInput,
+  elapsedMs: number
+): { leftWall: number; right: number; playerHit: HitResult; opponentHit: HitResult } {
+  // Update arena walls
+  const walls = updateArenaWalls(elapsedMs);
+
+  // Handle both inputs
+  handlePlayerInput(player, playerInput);
+  handlePlayerInput(opponent, opponentInput);
+
+  // Update dash for both
+  updateDash(player);
+  updateDash(opponent);
+
+  // Both can punch; order matters: player first, then opponent.
+  // This permits both to hit each other in the same frame if timing overlaps.
+  const playerHit = updatePunch(player, opponent);
+  const opponentHit = updatePunch(opponent, player);
+
+  // Resolve push collision only once
+  resolvePushCollision(player, opponent);
+
+  // Clamp both entities to arena bounds
+  clampToArena(player, walls.left, walls.right);
+  clampToArena(opponent, walls.left, walls.right);
+
+  // Update timers for both
+  updateTimers(player);
+  updateTimers(opponent);
+
+  // Update stamina for both
+  updateStamina(player);
+  updateStamina(opponent);
+
+  // Update close-range penalties for both
+  updateCloseRangePenalty(player, opponent);
+  updateCloseRangePenalty(opponent, player);
+
+  // Footstep timers for both
+  for (const e of [player, opponent]) {
+    if (e.isMoving && !e.isDashing) {
+      e.footstepTimer = (e.footstepTimer || 0) + 1;
+    } else {
+      e.footstepTimer = 0;
+    }
+  }
+
+  return { leftWall: walls.left, right: walls.right, playerHit: playerHit, opponentHit: opponentHit };
 }
 
 /**

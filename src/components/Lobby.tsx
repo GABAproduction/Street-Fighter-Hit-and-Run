@@ -5,8 +5,11 @@ import { generateDefaultName, generateRoomCode } from '@/lib/realtimeHooks';
 import { supabase } from '@/lib/supabaseClient';
 import GamePreview from '@/components/GamePreview';
 
+type BotDifficulty = 'easy' | 'normal' | 'hard';
+
 interface LobbyProps {
   onEnterRoom: (roomCode: string, name: string) => void;
+  onStartSingle: (difficulty: BotDifficulty, winsNeeded: number, name: string) => void;
 }
 
 interface PublicRoom {
@@ -36,7 +39,7 @@ function InfoCard({ icon, title, children }: { icon: string; title: string; chil
   );
 }
 
-export default function Lobby({ onEnterRoom }: LobbyProps) {
+export default function Lobby({ onEnterRoom, onStartSingle }: LobbyProps) {
   const [name, setName] = useState('');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [creating, setCreating] = useState(false);
@@ -46,6 +49,9 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
   const [isPublicRoom, setIsPublicRoom] = useState(true);
   const [showRoomList, setShowRoomList] = useState(false);
   const [publicRooms, setPublicRooms] = useState<PublicRoom[]>([]);
+  const [mode, setMode] = useState<'multiplayer' | 'single'>('multiplayer');
+  const [singleDifficulty, setSingleDifficulty] = useState<BotDifficulty>('normal');
+  const [singleWinsNeeded, setSingleWinsNeeded] = useState<number>(2);
 
   // Load saved name from localStorage
   useEffect(() => {
@@ -205,6 +211,7 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
           <div className="hidden items-center gap-2 sm:flex">
             <Chip>🟢 Realtime</Chip>
             <Chip>🎮 1v1</Chip>
+            <Chip>🤖 vs Bot</Chip>
             <Chip>🕹️ Tanpa Login</Chip>
           </div>
         </nav>
@@ -264,85 +271,173 @@ export default function Lobby({ onEnterRoom }: LobbyProps) {
             </div>
 
             <div className="mt-6 space-y-4 border-t border-white/10 pt-6">
-              {/* Jenis room */}
+              {/* Mode permainan */}
               <div>
-                <p className="mb-2 text-sm font-medium text-white/80">Jenis Room</p>
+                <p className="mb-2 text-sm font-medium text-white/80">Mode Permainan</p>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setIsPublicRoom(true)}
+                    onClick={() => setMode('multiplayer')}
                     className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
-                      isPublicRoom
-                        ? 'border-green-400/60 bg-green-500/20 text-green-100 shadow-inner'
+                      mode === 'multiplayer'
+                        ? 'border-blue-400/60 bg-blue-500/20 text-blue-100 shadow-inner'
                         : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
                     }`}
                   >
-                    🌍 Publik
+                    🌐 Multiplayer (2 Pemain)
                   </button>
                   <button
-                    onClick={() => setIsPublicRoom(false)}
+                    onClick={() => setMode('single')}
                     className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
-                      !isPublicRoom
-                        ? 'border-amber-400/60 bg-amber-500/20 text-amber-100 shadow-inner'
+                      mode === 'single'
+                        ? 'border-orange-400/60 bg-orange-500/20 text-orange-100 shadow-inner'
                         : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
                     }`}
                   >
-                    🔒 Privat
+                    🤖 Single-Player (vs Bot)
                   </button>
                 </div>
-                <p className="mt-1 text-xs text-white/40">
-                  {isPublicRoom ? 'Room tampil di daftar room publik.' : 'Hanya bisa masuk lewat kode.'}
-                </p>
               </div>
 
-              {/* Buat Room */}
-              <button
-                onClick={handleCreateRoom}
-                disabled={creating}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-4 text-lg font-black tracking-wide shadow-lg shadow-emerald-900/40 transition hover:from-green-400 hover:to-emerald-500 disabled:opacity-60"
-              >
-                {creating ? 'MEMBUAT...' : '🎮 BUAT ROOM BARU'}
-              </button>
-
-              <div className="relative py-1">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-[#0b0b1e] px-3 tracking-widest text-white/40">ATAU</span>
-                </div>
-              </div>
-
-              {/* Gabung Room */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">Kode Room (4-6 huruf/angka)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={roomCodeInput}
-                    onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Contoh: A7K9M"
-                    className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-center text-lg tracking-[0.3em] text-white placeholder-white/25 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40"
-                    maxLength={6}
-                    style={{ textTransform: 'uppercase' }}
-                  />
+              {/* Single player */}
+              {mode === 'single' && (
+                <div className="space-y-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-white/80">Level Bot</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { value: 'easy', label: 'Mudah' },
+                        { value: 'normal', label: 'Sedang' },
+                        { value: 'hard', label: 'Sulit' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setSingleDifficulty(opt.value)}
+                          className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+                            singleDifficulty === opt.value
+                              ? 'border-orange-400/60 bg-orange-500/20 text-orange-100 shadow-inner'
+                              : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-white/80">Format Pertandingan</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: 1, label: '1 Ronde' },
+                        { value: 2, label: 'Best of 3' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setSingleWinsNeeded(opt.value)}
+                          className={`rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+                            singleWinsNeeded === opt.value
+                              ? 'border-yellow-400/60 bg-yellow-500/20 text-yellow-100 shadow-inner'
+                              : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button
-                    onClick={handleJoinRoom}
-                    disabled={joining}
-                    className="whitespace-nowrap rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 font-black tracking-wide shadow-lg shadow-blue-900/40 transition hover:from-blue-400 hover:to-indigo-500 disabled:opacity-60"
+                    onClick={() => {
+                      const trimmed = name.trim() || savedName || generateDefaultName();
+                      onStartSingle(singleDifficulty, singleWinsNeeded, trimmed);
+                    }}
+                    className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-red-600 py-4 text-lg font-black tracking-wide shadow-lg shadow-orange-900/40 transition hover:from-orange-400 hover:to-red-500"
                   >
-                    {joining ? 'MASUK...' : 'GABUNG'}
+                    ⚔️ MULAI MELAWAN BOT
                   </button>
                 </div>
-              </div>
+              )}
+              {mode === 'multiplayer' && (
+                <div>
+                  {/* Jenis room */}
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-white/80">Jenis Room</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setIsPublicRoom(true)}
+                        className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                          isPublicRoom
+                            ? 'border-green-400/60 bg-green-500/20 text-green-100 shadow-inner'
+                            : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                        }`}
+                      >
+                        🌍 Publik
+                      </button>
+                      <button
+                        onClick={() => setIsPublicRoom(false)}
+                        className={`rounded-xl border px-4 py-3 text-sm font-bold transition ${
+                          !isPublicRoom
+                            ? 'border-amber-400/60 bg-amber-500/20 text-amber-100 shadow-inner'
+                            : 'border-white/15 bg-black/30 text-white/50 hover:border-white/30'
+                        }`}
+                      >
+                        🔒 Privat
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-white/40">
+                      {isPublicRoom ? 'Room tampil di daftar room publik.' : 'Hanya bisa masuk lewat kode.'}
+                    </p>
+                  </div>
 
-              {/* Daftar room publik */}
-              <button
-                onClick={() => setShowRoomList((v) => !v)}
-                className="w-full rounded-xl border border-purple-400/40 bg-purple-500/15 py-3 font-bold text-purple-100 transition hover:bg-purple-500/25"
-              >
-                {showRoomList ? '▲ Sembunyikan Daftar Room' : '📋 LIHAT ROOM PUBLIK'}
-              </button>
+                  {/* Buat Room */}
+                  <button
+                    onClick={handleCreateRoom}
+                    disabled={creating}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-4 text-lg font-black tracking-wide shadow-lg shadow-emerald-900/40 transition hover:from-green-400 hover:to-emerald-500 disabled:opacity-60"
+                  >
+                    {creating ? 'MEMBUAT...' : '🎮 BUAT ROOM BARU'}
+                  </button>
+
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-white/10" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-[#0b0b1e] px-3 tracking-widest text-white/40">ATAU</span>
+                    </div>
+                  </div>
+
+                  {/* Gabung Room */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-white/80">Kode Room (4-6 huruf/angka)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={roomCodeInput}
+                        onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Contoh: A7K9M"
+                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-center text-lg tracking-[0.3em] text-white placeholder-white/25 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/40"
+                        maxLength={6}
+                        style={{ textTransform: 'uppercase' }}
+                      />
+                      <button
+                        onClick={handleJoinRoom}
+                        disabled={joining}
+                        className="whitespace-nowrap rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 font-black tracking-wide shadow-lg shadow-blue-900/40 transition hover:from-blue-400 hover:to-indigo-500 disabled:opacity-60"
+                      >
+                        {joining ? 'MASUK...' : 'GABUNG'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Daftar room publik */}
+                  <button
+                    onClick={() => setShowRoomList((v) => !v)}
+                    className="w-full rounded-xl border border-purple-400/40 bg-purple-500/15 py-3 font-bold text-purple-100 transition hover:bg-purple-500/25"
+                  >
+                    {showRoomList ? '▲ Sembunyikan Daftar Room' : '📋 LIHAT ROOM PUBLIK'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Error */}

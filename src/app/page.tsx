@@ -3,8 +3,21 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { getOrCreateUserId, generateDefaultName } from '@/lib/realtimeHooks';
+import type { BotDifficulty } from '@/lib/botAI';
 
 // Dynamic imports
+const SinglePlayerGame = dynamic(() => import('@/components/SinglePlayerGame').then(m => m.default), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-[540px] bg-gray-900 rounded-lg">
+      <div className="text-center text-white font-mono">
+        <div className="text-4xl mb-4">⏳</div>
+        <div>Memuat game single-player...</div>
+      </div>
+    </div>
+  ),
+});
+
 const Lobby = dynamic(() => import('@/components/Lobby').then(m => m.default), {
   ssr: false,
   loading: () => (
@@ -54,13 +67,15 @@ const MultiplayerGameCanvas = dynamic(() => import('@/components/MultiplayerGame
 });
 
 export default function Home() {
-  const [phase, setPhase] = useState<'lobby' | 'room' | 'game' | 'multiplayer'>('lobby');
+  const [phase, setPhase] = useState<'lobby' | 'room' | 'game' | 'multiplayer' | 'single'>('lobby');
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [isPlayer1, setIsPlayer1] = useState(true);
   const [opponentName, setOpponentName] = useState('');
   const [winsNeeded, setWinsNeeded] = useState(2);
+  const [singleDifficulty, setSingleDifficulty] = useState<'easy' | 'normal' | 'hard'>('normal');
+  const [singleWinsNeeded, setSingleWinsNeeded] = useState<number>(2);
 
   const userId = getOrCreateUserId();
 
@@ -115,6 +130,13 @@ export default function Home() {
     }
   };
 
+  const handleStartSingle = (difficulty: BotDifficulty, winsNeededParam: number, name: string) => {
+    setSingleDifficulty(difficulty);
+    setSingleWinsNeeded(winsNeededParam);
+    setPlayerName(name);
+    setPhase('single');
+  };
+
   const handleLeaveRoom = () => {
     setRoomCode('');
     setPlayerName('');
@@ -128,7 +150,7 @@ export default function Home() {
   };
 
   if (phase === 'lobby') {
-    return <Lobby onEnterRoom={handleEnterRoom} />;
+    return <Lobby onEnterRoom={handleEnterRoom} onStartSingle={handleStartSingle} />;
   }
 
   if (phase === 'room') {
@@ -156,7 +178,37 @@ export default function Home() {
     );
   }
 
-  // phase === 'game' (local)
+  if (phase === 'single') {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white font-mono flex flex-col items-center py-6 px-4">
+        <header className="mb-4 text-center w-full max-w-[960px]">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              onClick={handleLeaveRoom}
+              className="text-xs text-gray-400 hover:text-white border border-gray-700 rounded px-3 py-1"
+            >
+              ← Lobi
+            </button>
+            <h1 className="text-xl font-bold">STREET FIGHTER : HIT AND RUN</h1>
+            <span className="text-sm text-gray-400">{playerName}</span>
+          </div>
+          <p className="text-xs text-gray-500">
+            Mode Single-Player vs BOT ·{' '}
+            {singleDifficulty === 'easy' ? 'Mudah' : singleDifficulty === 'normal' ? 'Sedang' : 'Sulit'} ·{' '}
+            {singleWinsNeeded === 1 ? '1 Ronde' : 'Best of 3'}
+          </p>
+        </header>
+        <SinglePlayerGame
+          difficulty={singleDifficulty}
+          winsNeeded={singleWinsNeeded}
+          onMatchEnd={(w) => handleMatchEnd(w as 'player' | 'target' | 'opponent')}
+          onBackToLobby={handleLeaveRoom}
+        />
+      </div>
+    );
+  }
+
+  // phase === 'game' (local) — fallback
   return (
     <div className="min-h-screen bg-gray-900 text-white font-mono flex flex-col items-center py-6 px-4">
       <header className="mb-4 text-center w-full max-w-[960px]">
